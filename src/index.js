@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 5000;
 // --- Middleware ---
 app.use(cors({
     // Allow the client (Next.js) to access the API
-    origin: 'http://localhost:3000',
+    origin: '*',
     credentials: true
 }));
 
