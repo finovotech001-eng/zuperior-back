@@ -13,19 +13,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
  * Handles the registration (signup) of a new user.
  */
 export const register = async (req, res) => {
-    console.log('Registration request received');
-    console.log('Request body:', req.body);
-    console.log('Request method:', req.method);
-    console.log('Content-Type:', req.headers['content-type']);
+    const { name, email, password, country, phone } = req.body;
 
-    // Handle name field
-    const name = req.body.name;
-
-    const { email, password, country } = req.body;
-
-    // 1. Basic validation
+    // 1. Basic validation - match exactly what the form sends
     if (!name || !email || !password) {
-        console.log('Validation failed - missing fields:', { name: !!name, email: !!email, password: !!password });
         return res.status(400).json({ message: 'Please enter all required fields: name, email, and password.' });
     }
 
@@ -40,15 +31,14 @@ export const register = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // 4. Save the new user to the database
+        // 4. Save the new user to the database - include phone field
         const newUser = await prisma.User.create({
             data: {
                 name,
                 email,
                 password: hashedPassword,
                 country,
-                // clientId is often set by the database or a custom service
-                // For simplicity here, let the database default handle it or assume it's auto-incremented.
+                phone: phone || null, // Include phone field from form
             },
             // Select fields to return
             select: { id: true, clientId: true, name: true, email: true },

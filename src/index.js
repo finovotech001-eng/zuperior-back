@@ -7,7 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import { PrismaClient } from '@prisma/client';
-// import authRoutes from './routes/auth.routes.js'; // Ensure this path is correct
+import authRoutes from './routes/auth.routes.js'; // Ensure this path is correct
 
 // --- Configuration ---
 const app = express();
@@ -38,8 +38,8 @@ const upload = multer({
 });
 
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Make multer upload available globally
 app.use((req, res, next) => {
@@ -47,16 +47,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// Middleware to handle multipart/form-data for auth routes
-// app.use('/api/auth/register', upload.none()); // Removed - using JSON for auth
-
 // --- Health Check Route ---
 app.get('/', (req, res) => {
     res.status(200).send('Zuperior API is running!');
 });
 
 // --- Routes ---
-// Authentication routes will be registered dynamically below
+app.use('/api', authRoutes); // Authentication routes (Login/Register)
 
 // --- Start Server ---
 async function main() {
@@ -67,15 +64,6 @@ async function main() {
         app.listen(PORT, async () => {
             console.log(`Server is running on port ${PORT}`);
             console.log(`API URL: http://localhost:${PORT}/`);
-
-            // Register Auth routes
-            try {
-                const authRoutes = await import('./routes/auth.routes.js');
-                app.use('/api', authRoutes.default);
-                console.log('Auth routes registered at /api/auth/*');
-            } catch (error) {
-                console.error('Failed to load Auth routes:', error.message);
-            }
 
             // Register MT5 routes after server starts
             try {
