@@ -5,6 +5,9 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// JWT Secret - should match the one used in auth.controller.js
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+
 // Middleware to protect routes
 export const protect = async (req, res, next) => {
   try {
@@ -23,7 +26,7 @@ export const protect = async (req, res, next) => {
 
     try {
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET);
 
       // Get user from the token
       const user = await prisma.User.findFirst({

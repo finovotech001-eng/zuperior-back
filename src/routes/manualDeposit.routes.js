@@ -7,19 +7,8 @@ import { protect } from '../middleware/auth.middleware.js';
 const router = express.Router();
 
 // Protected routes (require authentication)
-// Use multer for file uploads on create endpoint
-router.post('/manual-deposit/create', protect, (req, res, next) => {
-    // Use multer middleware for file uploads
-    req.upload.single('proofFile')(req, res, (err) => {
-        if (err) {
-            return res.status(400).json({
-                success: false,
-                message: err.message || 'File upload error'
-            });
-        }
-        next();
-    });
-}, manualDepositController.createManualDeposit);
+// File upload is handled by multer middleware in app.js
+router.post('/manual-deposit/create', protect, manualDepositController.createManualDeposit);
 router.get('/manual-deposit/user', protect, manualDepositController.getUserManualDeposits);
 
 // Admin routes (require authentication + admin check)

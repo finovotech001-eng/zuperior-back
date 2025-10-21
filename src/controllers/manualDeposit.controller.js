@@ -8,11 +8,25 @@ const prisma = new PrismaClient();
 // Create a new manual deposit request
 export const createManualDeposit = async (req, res) => {
     try {
-        // Handle both FormData and JSON requests
+        // Handle FormData requests (forwarded from Next.js API)
         let mt5AccountId, amount, transactionHash, proofFileUrl;
 
-        if (req.is('multipart/form-data')) {
-            // Handle FormData (file upload)
+        // Check if this is FormData (from Next.js API proxy)
+        if (req.body && typeof req.body === 'object' && req.body._boundary) {
+            // This is FormData - extract fields
+            mt5AccountId = req.body.fields?.mt5AccountId || req.body.mt5AccountId;
+            amount = req.body.fields?.amount || req.body.amount;
+            transactionHash = req.body.fields?.transactionHash || req.body.transactionHash;
+            proofFileUrl = req.body.fields?.proofFileUrl || req.body.proofFileUrl;
+
+            // Handle file if present
+            if (req.body.file || req.file) {
+                const file = req.body.file || req.file;
+                proofFileUrl = `https://storage.example.com/proof-files/${Date.now()}-${file.originalname}`;
+                console.log('📁 File uploaded:', file.originalname);
+            }
+        } else {
+            // Handle direct JSON request or regular form data
             mt5AccountId = req.body.mt5AccountId;
             amount = req.body.amount;
             transactionHash = req.body.transactionHash;
@@ -20,14 +34,9 @@ export const createManualDeposit = async (req, res) => {
 
             // Handle file upload if present
             if (req.file) {
-                // Here you would typically upload the file to cloud storage
-                // For now, we'll store a placeholder URL
                 proofFileUrl = `https://storage.example.com/proof-files/${Date.now()}-${req.file.originalname}`;
                 console.log('📁 File uploaded:', req.file.originalname);
             }
-        } else {
-            // Handle JSON request
-            ({ mt5AccountId, amount, transactionHash, proofFileUrl } = req.body);
         }
 
         const userId = req.user.id;
