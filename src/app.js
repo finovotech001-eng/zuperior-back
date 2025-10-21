@@ -15,7 +15,7 @@ const upload = multer({ storage: storage });
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const mt5Routes = require('./routes/mt5.routes');
-const manualDepositRoutes = require('./routes/manualDeposit.routes');
+const depositRoutes = require('./routes/deposit.routes');
 const adminRoutes = require('./routes/admin.routes');
 const kycRoutes = require('./routes/kyc.routes');
 // ... import other routes (txRoutes, kycRoutes)
@@ -30,7 +30,7 @@ app.use(cors({
 app.use(express.json());
 
 // Add multer upload to request object for routes that need it
-app.use('/api/manual-deposit/create', (req, res, next) => {
+app.use('/api/deposit/create', (req, res, next) => {
   upload.single('proofFile')(req, res, (err) => {
     if (err) {
       return res.status(400).json({
@@ -47,7 +47,7 @@ app.use('/api/manual-deposit/create', (req, res, next) => {
 app.use('/api', authRoutes);
 app.use('/api', userRoutes);
 app.use('/api', mt5Routes);
-app.use('/api', manualDepositRoutes);
+app.use('/api', depositRoutes);
 app.use('/api', adminRoutes);
 app.use('/api', kycRoutes);
 // app.use('/api', txRoutes);

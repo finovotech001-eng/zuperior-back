@@ -6,19 +6,22 @@ import { logActivity } from './activityLog.controller.js';
 
 const prisma = new PrismaClient();
 
-// Create a new manual deposit request
-export const createManualDeposit = async (req, res) => {
+// Create a new deposit request
+export const createDeposit = async (req, res) => {
     try {
         // Handle FormData requests (forwarded from Next.js API)
-        let mt5AccountId, amount, transactionHash, proofFileUrl;
+        let mt5AccountId, amount, method = 'manual', transactionHash, proofFileUrl, bankDetails, cryptoAddress;
 
         // Check if this is FormData (from Next.js API proxy)
         if (req.body && typeof req.body === 'object' && req.body._boundary) {
             // This is FormData - extract fields
             mt5AccountId = req.body.fields?.mt5AccountId || req.body.mt5AccountId;
             amount = req.body.fields?.amount || req.body.amount;
+            method = req.body.fields?.method || req.body.method || 'manual';
             transactionHash = req.body.fields?.transactionHash || req.body.transactionHash;
             proofFileUrl = req.body.fields?.proofFileUrl || req.body.proofFileUrl;
+            bankDetails = req.body.fields?.bankDetails || req.body.bankDetails;
+            cryptoAddress = req.body.fields?.cryptoAddress || req.body.cryptoAddress;
 
             // Handle file if present
             if (req.body.file || req.file) {
@@ -30,8 +33,11 @@ export const createManualDeposit = async (req, res) => {
             // Handle direct JSON request or regular form data
             mt5AccountId = req.body.mt5AccountId;
             amount = req.body.amount;
+            method = req.body.method || 'manual';
             transactionHash = req.body.transactionHash;
             proofFileUrl = req.body.proofFileUrl;
+            bankDetails = req.body.bankDetails;
+            cryptoAddress = req.body.cryptoAddress;
 
             // Handle file upload if present
             if (req.file) {
@@ -69,22 +75,17 @@ export const createManualDeposit = async (req, res) => {
 
         console.log('✅ MT5 account verified:', account.id);
 
-        if (!account) {
-            return res.status(404).json({
-                success: false,
-                message: 'MT5 account not found or access denied'
-            });
-        }
-
         // Create deposit record
         console.log('🔄 Creating deposit record for user:', userId);
         console.log('📊 Deposit data:', {
             userId,
             mt5AccountId,
             amount: parseFloat(amount),
-            method: 'manual',
+            method,
             transactionHash,
             proofFileUrl,
+            bankDetails,
+            cryptoAddress,
             status: 'pending'
         });
 
@@ -94,11 +95,12 @@ export const createManualDeposit = async (req, res) => {
                 mt5AccountId: mt5AccountId,
                 amount: parseFloat(amount),
                 currency: 'USD',
-                method: 'manual',
-                paymentMethod: 'manual',
-                depositAddress: 'Twinxa7902309skjhfsdlhflksjdhlkLL',
+                method: method,
+                paymentMethod: method,
                 transactionHash: transactionHash || null,
                 proofFileUrl: proofFileUrl || null,
+                bankDetails: bankDetails || null,
+                cryptoAddress: cryptoAddress || null,
                 status: 'pending'
             }
         });
@@ -111,8 +113,8 @@ export const createManualDeposit = async (req, res) => {
                 amount: parseFloat(amount),
                 currency: 'USD',
                 status: 'pending',
-                paymentMethod: 'manual',
-                description: `Manual deposit request - ${deposit.id}`,
+                paymentMethod: method,
+                description: `${method} deposit request - ${deposit.id}`,
                 depositId: deposit.id
             }
         });
@@ -127,7 +129,7 @@ export const createManualDeposit = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error creating manual deposit:', error);
+        console.error('❌ Error creating deposit:', error);
         console.error('❌ Error stack:', error.stack);
         console.error('❌ Error details:', {
             name: error.name,
@@ -419,6 +421,132 @@ export const getAllDeposits = async (req, res) => {
         res.status(500).json({
             success: false,
             message: error.message || 'Internal server error'
+        });
+    }
+};
+
+// Get deposit by ID with full details
+export const getDepositById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const deposit = await prisma.Deposit.findUnique({
+            where: { id },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        clientId: true,
+                        phone: true,
+                        country: true
+                    }
+                },
+                transactions: true
+            }
+        });
+
+        if (!deposit) {
+            return res.status(404).json({
+                success: false,
+                message: 'Deposit not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: deposit
+        });
+    } catch (error) {
+        console.error('Error fetching deposit:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch deposit'
+        });
+    }
+};
+
+// Get deposit statistics
+export const getDepositStats = async (req, res) => {
+    try {
+        const { days = 30 } = req.query;
+
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(days));
+
+        // Get deposit counts by status
+        const statusStats = await prisma.Deposit.groupBy({
+            by: ['status'],
+            where: {
+                createdAt: {
+                    gte: startDate
+                }
+            },
+            _count: {
+                status: true
+            },
+            _sum: {
+                amount: true
+            }
+        });
+
+        // Get deposit counts by method
+        const methodStats = await prisma.Deposit.groupBy({
+            by: ['method'],
+            where: {
+                createdAt: {
+                    gte: startDate
+                }
+            },
+            _count: {
+                method: true
+            },
+            _sum: {
+                amount: true
+            }
+        });
+
+        // Get total amounts
+        const totalStats = await prisma.Deposit.aggregate({
+            where: {
+                createdAt: {
+                    gte: startDate
+                }
+            },
+            _sum: {
+                amount: true
+            },
+            _count: true
+        });
+
+        // Get daily deposit amounts
+        const dailyStats = await prisma.$queryRaw`
+            SELECT
+                DATE(created_at) as date,
+                COUNT(*) as count,
+                SUM(amount) as total_amount
+            FROM "Deposit"
+            WHERE created_at >= ${startDate}
+            GROUP BY DATE(created_at)
+            ORDER BY date DESC
+        `;
+
+        res.json({
+            success: true,
+            data: {
+                statusStats,
+                methodStats,
+                totalStats,
+                dailyStats,
+                period: `${days} days`
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching deposit stats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch deposit statistics'
         });
     }
 };

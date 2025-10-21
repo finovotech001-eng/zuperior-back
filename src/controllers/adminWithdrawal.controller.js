@@ -216,6 +216,16 @@ export const approveWithdrawal = async (req, res) => {
         }
       });
 
+      // Update linked transaction status to completed
+      await prisma.Transaction.updateMany({
+        where: { withdrawalId: id },
+        data: {
+          status: 'completed',
+          transactionId: withdrawal.id,
+          updatedAt: new Date()
+        }
+      });
+
       // Log activity
       await logActivity(
         withdrawal.userId,

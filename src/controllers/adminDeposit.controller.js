@@ -46,7 +46,7 @@ export const getAllManualDeposits = async (req, res) => {
     }
 
     // Get deposits with user info
-    const deposits = await prisma.ManualDeposit.findMany({
+    const deposits = await prisma.Deposit.findMany({
       where,
       include: {
         user: {
@@ -66,7 +66,7 @@ export const getAllManualDeposits = async (req, res) => {
     });
 
     // Get total count for pagination
-    const total = await prisma.ManualDeposit.count({ where });
+    const total = await prisma.Deposit.count({ where });
 
     res.json({
       success: true,
@@ -261,7 +261,7 @@ export const rejectDeposit = async (req, res) => {
       });
     }
 
-    const deposit = await prisma.ManualDeposit.findUnique({
+    const deposit = await prisma.Deposit.findUnique({
       where: { id },
       include: {
         user: {
@@ -345,7 +345,7 @@ export const getDepositStats = async (req, res) => {
     startDate.setDate(startDate.getDate() - parseInt(days));
 
     // Get deposit counts by status
-    const statusStats = await prisma.ManualDeposit.groupBy({
+    const statusStats = await prisma.Deposit.groupBy({
       by: ['status'],
       where: {
         createdAt: {
@@ -361,7 +361,7 @@ export const getDepositStats = async (req, res) => {
     });
 
     // Get total amounts
-    const totalStats = await prisma.ManualDeposit.aggregate({
+    const totalStats = await prisma.Deposit.aggregate({
       where: {
         createdAt: {
           gte: startDate
@@ -375,11 +375,11 @@ export const getDepositStats = async (req, res) => {
 
     // Get daily deposit amounts
     const dailyStats = await prisma.$queryRaw`
-      SELECT 
+      SELECT
         DATE(created_at) as date,
         COUNT(*) as count,
         SUM(amount) as total_amount
-      FROM "ManualDeposit"
+      FROM "Deposit"
       WHERE created_at >= ${startDate}
       GROUP BY DATE(created_at)
       ORDER BY date DESC

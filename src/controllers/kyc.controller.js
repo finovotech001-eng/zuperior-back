@@ -229,11 +229,12 @@ export const handleCallback = async (req, res) => {
         console.log('🔔 Shufti Pro Webhook received:', {
             reference: payload.reference,
             event: payload.event,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            payload: JSON.stringify(payload, null, 2)
         });
 
         // Extract reference and event type
-        const { reference, event, verification_result } = payload;
+        const { reference, event, verification_result, verification_data, declined_reason, error } = payload;
 
         if (!reference) {
             return res.status(400).json({
@@ -242,13 +243,23 @@ export const handleCallback = async (req, res) => {
             });
         }
 
-        // Find KYC record by reference (document or address)
+        // Find KYC record by reference (document, address, or AML)
         const kyc = await prisma.KYC.findFirst({
             where: {
                 OR: [
                     { documentReference: reference },
-                    { addressReference: reference }
+                    { addressReference: reference },
+                    { amlReference: reference }
                 ]
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true
+                    }
+                }
             }
         });
 
@@ -263,51 +274,109 @@ export const handleCallback = async (req, res) => {
         // Update KYC status based on event
         const isAccepted = event === 'verification.accepted';
         const isDeclined = event === 'verification.declined';
+        const isPending = event === 'request.pending' || event === 'request.received';
+        const isCancelled = event === 'request.invalid' || event === 'request.timeout';
 
         let updateData = {};
+        let verificationType = '';
 
-        // Determine if this is document or address verification
+        // Determine verification type and update accordingly
         if (kyc.documentReference === reference) {
+            verificationType = 'document';
             updateData.isDocumentVerified = isAccepted;
-            if (isDeclined && verification_result?.document?.declined_reason) {
-                updateData.rejectionReason = verification_result.document.declined_reason;
+            updateData.documentSubmittedAt = new Date();
+            
+            if (isDeclined) {
+                const reason = declined_reason || 
+                              verification_result?.document?.declined_reason ||
+                              verification_data?.document?.message ||
+                              'Document verification failed';
+                updateData.rejectionReason = reason;
+                updateData.isDocumentVerified = false;
+            } else if (isAccepted) {
+                updateData.rejectionReason = null;
             }
         } else if (kyc.addressReference === reference) {
+            verificationType = 'address';
             updateData.isAddressVerified = isAccepted;
-            if (isDeclined && verification_result?.address?.declined_reason) {
-                updateData.rejectionReason = verification_result.address.declined_reason;
+            updateData.addressSubmittedAt = new Date();
+            
+            if (isDeclined) {
+                const reason = declined_reason || 
+                              verification_result?.address?.declined_reason ||
+                              verification_data?.address?.message ||
+                              'Address verification failed';
+                updateData.rejectionReason = reason;
+                updateData.isAddressVerified = false;
+            } else if (isAccepted) {
+                updateData.rejectionReason = null;
+            }
+        } else if (kyc.amlReference === reference) {
+            verificationType = 'aml';
+            // AML check doesn't change document/address verification
+            // But we track the result
+            if (isDeclined) {
+                const reason = declined_reason || 
+                              verification_result?.background_checks?.declined_reason ||
+                              'AML screening failed';
+                updateData.rejectionReason = reason;
             }
         }
 
-        // Update verification status
+        // Determine overall verification status
+        const newDocumentStatus = updateData.isDocumentVerified !== undefined 
+            ? updateData.isDocumentVerified 
+            : kyc.isDocumentVerified;
+        const newAddressStatus = updateData.isAddressVerified !== undefined 
+            ? updateData.isAddressVerified 
+            : kyc.isAddressVerified;
+
+        if (isAccepted) {
+            if (newDocumentStatus && newAddressStatus) {
+                updateData.verificationStatus = 'Verified';
+            } else if (newDocumentStatus || newAddressStatus) {
+                updateData.verificationStatus = 'Partially Verified';
+            }
+        } else if (isDeclined) {
+            updateData.verificationStatus = 'Declined';
+        } else if (isPending) {
+            updateData.verificationStatus = 'Pending';
+        } else if (isCancelled) {
+            updateData.verificationStatus = 'Cancelled';
+        }
+
+        // Update KYC record
         const updatedKyc = await prisma.KYC.update({
             where: { id: kyc.id },
-            data: {
-                ...updateData,
-                verificationStatus: 
-                    (kyc.isDocumentVerified || updateData.isDocumentVerified) && 
-                    (kyc.isAddressVerified || updateData.isAddressVerified)
-                        ? 'Verified'
-                        : (updateData.isDocumentVerified || updateData.isAddressVerified)
-                            ? 'Partially Verified'
-                            : 'Pending'
-            }
+            data: updateData
         });
 
         console.log('✅ KYC record updated via webhook:', {
             reference,
             event,
-            verificationStatus: updatedKyc.verificationStatus
+            verificationType,
+            verificationStatus: updatedKyc.verificationStatus,
+            userId: kyc.userId
         });
 
-        // TODO: Send email notification to user
+        // TODO: Send email notification to user based on status
+        // if (isAccepted) {
+        //     await sendKycApprovedEmail(kyc.user.email, kyc.user.name);
+        // } else if (isDeclined) {
+        //     await sendKycRejectedEmail(kyc.user.email, kyc.user.name, updateData.rejectionReason);
+        // }
 
         res.json({
             success: true,
-            message: 'Callback processed successfully'
+            message: 'Callback processed successfully',
+            data: {
+                reference,
+                verificationType,
+                status: updatedKyc.verificationStatus
+            }
         });
     } catch (error) {
-        console.error('Error processing callback:', error);
+        console.error('❌ Error processing callback:', error);
         res.status(500).json({
             success: false,
             message: error.message || 'Internal server error'
