@@ -47,6 +47,19 @@ app.use((req, res, next) => {
     next();
 });
 
+// Ensure multipart form data (with optional proof file) is parsed
+app.use('/api/manual-deposit/create', (req, res, next) => {
+    upload.single('proofFile')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({
+                success: false,
+                message: err.message || 'File upload error'
+            });
+        }
+        next();
+    });
+});
+
 // --- Health Check Route ---
 app.get('/', (req, res) => {
     res.status(200).send('Zuperior API is running!');

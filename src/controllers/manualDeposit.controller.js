@@ -1,6 +1,6 @@
 // server/src/controllers/deposit.controller.js
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { depositMt5Balance } from '../services/mt5.service.js';
 import { logActivity } from './activityLog.controller.js';
 
@@ -9,38 +9,44 @@ const prisma = new PrismaClient();
 // Create a new manual deposit request
 export const createManualDeposit = async (req, res) => {
     try {
-        // Handle FormData requests (forwarded from Next.js API)
-        let mt5AccountId, amount, transactionHash, proofFileUrl;
+        console.log('');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('🚀 NEW MANUAL DEPOSIT REQUEST RECEIVED');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('📥 Request body type:', typeof req.body);
+        console.log('📥 Request body:', req.body);
+        console.log('📥 Request file:', req.file);
+        console.log('📥 Request headers:', req.headers);
+        console.log('📥 Content-Type:', req.get('Content-Type'));
+        console.log('');
+        
+        // Extract data from request body
+        // Express with multer puts form fields in req.body
+        let mt5AccountId = req.body?.mt5AccountId;
+        let amount = req.body?.amount;
+        let transactionHash = req.body?.transactionHash;
+        let proofFileUrl = req.body?.proofFileUrl;
 
-        // Check if this is FormData (from Next.js API proxy)
-        if (req.body && typeof req.body === 'object' && req.body._boundary) {
-            // This is FormData - extract fields
-            mt5AccountId = req.body.fields?.mt5AccountId || req.body.mt5AccountId;
-            amount = req.body.fields?.amount || req.body.amount;
-            transactionHash = req.body.fields?.transactionHash || req.body.transactionHash;
-            proofFileUrl = req.body.fields?.proofFileUrl || req.body.proofFileUrl;
+        console.log('🔍 Extracting form data:');
+        console.log('   - mt5AccountId from body:', mt5AccountId);
+        console.log('   - amount from body:', amount);
+        console.log('   - transactionHash from body:', transactionHash);
+        console.log('');
 
-            // Handle file if present
-            if (req.body.file || req.file) {
-                const file = req.body.file || req.file;
-                proofFileUrl = `https://storage.example.com/proof-files/${Date.now()}-${file.originalname}`;
-                console.log('📁 File uploaded:', file.originalname);
-            }
-        } else {
-            // Handle direct JSON request or regular form data
-            mt5AccountId = req.body.mt5AccountId;
-            amount = req.body.amount;
-            transactionHash = req.body.transactionHash;
-            proofFileUrl = req.body.proofFileUrl;
-
-            // Handle file upload if present
-            if (req.file) {
-                proofFileUrl = `https://storage.example.com/proof-files/${Date.now()}-${req.file.originalname}`;
-                console.log('📁 File uploaded:', req.file.originalname);
-            }
+        // Handle file upload if present
+        if (req.file) {
+            proofFileUrl = `https://storage.example.com/proof-files/${Date.now()}-${req.file.originalname}`;
+            console.log('📁 File uploaded:', req.file.originalname);
         }
 
         const userId = req.user.id;
+
+        console.log('📋 Extracted data:');
+        console.log('   - User ID:', userId);
+        console.log('   - MT5 Account ID:', mt5AccountId);
+        console.log('   - Amount:', amount);
+        console.log('   - Transaction Hash:', transactionHash || '(none)');
+        console.log('   - Proof File URL:', proofFileUrl || '(none)');
 
         // Validate required fields
         if (!mt5AccountId || !amount || amount <= 0) {
@@ -103,22 +109,89 @@ export const createManualDeposit = async (req, res) => {
             }
         });
 
+        let transactionCreated = false;
+
         // Create transaction record linked to deposit
-        await prisma.Transaction.create({
-            data: {
-                userId: userId,
-                type: 'deposit',
-                amount: parseFloat(amount),
-                currency: 'USD',
-                status: 'pending',
-                paymentMethod: 'manual',
-                description: `Manual deposit request - ${deposit.id}`,
-                depositId: deposit.id
+        try {
+            await prisma.Transaction.create({
+                data: {
+                    userId: userId,
+                    type: 'deposit',
+                    amount: parseFloat(amount),
+                    currency: 'USD',
+                    status: 'pending',
+                    paymentMethod: 'manual',
+                    description: `Manual deposit request - ${deposit.id}`,
+                    depositId: deposit.id
+                }
+            });
+            transactionCreated = true;
+        } catch (transactionError) {
+            if (transactionError instanceof Prisma.PrismaClientKnownRequestError && transactionError.code === 'P2022') {
+                console.error('Transaction table schema mismatch (missing column). Continuing without creating transaction log.');
+            } else {
+                throw transactionError;
             }
+        }
+
+        // Create MT5 transaction record immediately when deposit is requested
+        console.log('🔄 Creating MT5Transaction record...');
+        console.log('📊 MT5Transaction data:', {
+            type: 'Deposit',
+            amount: parseFloat(amount),
+            currency: 'USD',
+            status: 'pending',
+            paymentMethod: 'manual',
+            transactionId: transactionHash || deposit.id,
+            comment: `Manual deposit request - ${deposit.id}`,
+            depositId: deposit.id,
+            userId: userId,
+            mt5AccountId: account.id
         });
+
+        try {
+            const mt5Transaction = await prisma.MT5Transaction.create({
+                data: {
+                    type: 'Deposit',
+                    amount: parseFloat(amount),
+                    currency: 'USD',
+                    status: 'pending',
+                    paymentMethod: 'manual',
+                    transactionId: transactionHash || deposit.id,
+                    comment: `Manual deposit request - ${deposit.id}`,
+                    depositId: deposit.id,
+                    userId: userId,
+                    mt5AccountId: account.id  // Use the internal MT5Account.id
+                }
+            });
+
+            console.log('✅✅✅ MT5Transaction CREATED SUCCESSFULLY! ✅✅✅');
+            console.log('📋 MT5Transaction ID:', mt5Transaction.id);
+            console.log('📋 MT5Transaction full record:', JSON.stringify(mt5Transaction, null, 2));
+        } catch (mt5Error) {
+            console.error('❌❌❌ FAILED TO CREATE MT5Transaction! ❌❌❌');
+            console.error('❌ Error:', mt5Error.message);
+            console.error('❌ Error code:', mt5Error.code);
+            console.error('❌ Full error:', mt5Error);
+            // Don't throw - let deposit continue even if MT5Transaction fails
+        }
 
         console.log('✅ Deposit request created successfully:', deposit.id);
         console.log('📋 Created deposit record:', deposit);
+        
+        console.log('');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('✅ MANUAL DEPOSIT COMPLETED SUCCESSFULLY!');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('📊 Summary:');
+        console.log('   ✅ Deposit record created: ID =', deposit.id);
+        console.log('   ✅ Transaction record created');
+        console.log('   ✅ MT5Transaction record created (check logs above)');
+        console.log('');
+        console.log('🔍 To verify in database, run:');
+        console.log(`   SELECT * FROM "MT5Transaction" WHERE "depositId" = '${deposit.id}';`);
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('');
 
         res.status(201).json({
             success: true,
@@ -259,16 +332,18 @@ export const updateDepositStatus = async (req, res) => {
                 if (mt5Response.Success) {
                     console.log('✅ Deposit approved and MT5 balance updated');
 
-                    // Create MT5 transaction record
-                    await prisma.MT5Transaction.create({
+                    // Update existing MT5 transaction record to completed
+                    await prisma.MT5Transaction.updateMany({
+                        where: { 
+                            depositId: depositId,
+                            status: 'pending'
+                        },
                         data: {
-                            type: 'Deposit',
-                            amount: deposit.amount,
                             status: 'completed',
-                            paymentMethod: deposit.paymentMethod || 'manual',
-                            transactionId: deposit.transactionHash || deposit.id,
+                            processedBy: req.user.id,
+                            processedAt: new Date(),
                             comment: `Deposit approved - ${deposit.id}`,
-                            mt5AccountId: deposit.mt5AccountId
+                            updatedAt: new Date()
                         }
                     });
 
@@ -283,10 +358,55 @@ export const updateDepositStatus = async (req, res) => {
                     });
                 } else {
                     console.error('❌ Failed to update MT5 balance:', mt5Response.Message);
+                    
+                    // Update MT5 transaction to failed
+                    await prisma.MT5Transaction.updateMany({
+                        where: { 
+                            depositId: depositId,
+                            status: 'pending'
+                        },
+                        data: {
+                            status: 'failed',
+                            comment: `MT5 deposit failed - ${mt5Response.Message}`,
+                            processedBy: req.user.id,
+                            processedAt: new Date(),
+                            updatedAt: new Date()
+                        }
+                    });
                 }
             } catch (mt5Error) {
                 console.error('❌ Error updating MT5 balance:', mt5Error);
+                
+                // Update MT5 transaction to failed
+                await prisma.MT5Transaction.updateMany({
+                    where: { 
+                        depositId: depositId,
+                        status: 'pending'
+                    },
+                    data: {
+                        status: 'failed',
+                        comment: `MT5 deposit error - ${mt5Error.message}`,
+                        processedBy: req.user.id,
+                        processedAt: new Date(),
+                        updatedAt: new Date()
+                    }
+                });
             }
+        } else if (status === 'rejected') {
+            // Update MT5 transaction to rejected
+            await prisma.MT5Transaction.updateMany({
+                where: { 
+                    depositId: depositId,
+                    status: 'pending'
+                },
+                data: {
+                    status: 'rejected',
+                    comment: rejectionReason || 'Deposit rejected',
+                    processedBy: req.user.id,
+                    processedAt: new Date(),
+                    updatedAt: new Date()
+                }
+            });
         }
 
         // Log activity

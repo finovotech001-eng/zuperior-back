@@ -42,6 +42,19 @@ app.use('/api/deposit/create', (req, res, next) => {
   });
 });
 
+// Add multer for manual deposit route
+app.use('/api/manual-deposit/create', (req, res, next) => {
+  upload.single('proofFile')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || 'File upload error'
+      });
+    }
+    next();
+  });
+});
+
 // Routes
 // Note: Use /v1/ or /api/ for your endpoint prefix to match your Next.js proxy pattern
 app.use('/api', authRoutes);

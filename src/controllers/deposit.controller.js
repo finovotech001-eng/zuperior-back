@@ -119,6 +119,22 @@ export const createDeposit = async (req, res) => {
             }
         });
 
+        // Create MT5 transaction record immediately when deposit is requested
+        await prisma.MT5Transaction.create({
+            data: {
+                type: 'Deposit',
+                amount: parseFloat(amount),
+                currency: 'USD',
+                status: 'pending',
+                paymentMethod: method,
+                transactionId: transactionHash || deposit.id,
+                comment: `${method} deposit request - ${deposit.id}`,
+                depositId: deposit.id,
+                userId: userId,
+                mt5AccountId: account.id  // Use the internal MT5Account.id
+            }
+        });
+
         console.log('✅ Deposit request created successfully:', deposit.id);
         console.log('📋 Created deposit record:', deposit);
 
@@ -261,16 +277,18 @@ export const updateDepositStatus = async (req, res) => {
                 if (mt5Response.Success) {
                     console.log('✅ Deposit approved and MT5 balance updated');
 
-                    // Create MT5 transaction record
-                    await prisma.MT5Transaction.create({
+                    // Update existing MT5 transaction record to completed
+                    await prisma.MT5Transaction.updateMany({
+                        where: { 
+                            depositId: depositId,
+                            status: 'pending'
+                        },
                         data: {
-                            type: 'Deposit',
-                            amount: deposit.amount,
                             status: 'completed',
-                            paymentMethod: deposit.paymentMethod || 'manual',
-                            transactionId: deposit.transactionHash || deposit.id,
+                            processedBy: req.user.id,
+                            processedAt: new Date(),
                             comment: `Deposit approved - ${deposit.id}`,
-                            mt5AccountId: deposit.mt5AccountId
+                            updatedAt: new Date()
                         }
                     });
 
@@ -285,10 +303,55 @@ export const updateDepositStatus = async (req, res) => {
                     });
                 } else {
                     console.error('❌ Failed to update MT5 balance:', mt5Response.Message);
+                    
+                    // Update MT5 transaction to failed
+                    await prisma.MT5Transaction.updateMany({
+                        where: { 
+                            depositId: depositId,
+                            status: 'pending'
+                        },
+                        data: {
+                            status: 'failed',
+                            comment: `MT5 deposit failed - ${mt5Response.Message}`,
+                            processedBy: req.user.id,
+                            processedAt: new Date(),
+                            updatedAt: new Date()
+                        }
+                    });
                 }
             } catch (mt5Error) {
                 console.error('❌ Error updating MT5 balance:', mt5Error);
+                
+                // Update MT5 transaction to failed
+                await prisma.MT5Transaction.updateMany({
+                    where: { 
+                        depositId: depositId,
+                        status: 'pending'
+                    },
+                    data: {
+                        status: 'failed',
+                        comment: `MT5 deposit error - ${mt5Error.message}`,
+                        processedBy: req.user.id,
+                        processedAt: new Date(),
+                        updatedAt: new Date()
+                    }
+                });
             }
+        } else if (status === 'rejected') {
+            // Update MT5 transaction to rejected
+            await prisma.MT5Transaction.updateMany({
+                where: { 
+                    depositId: depositId,
+                    status: 'pending'
+                },
+                data: {
+                    status: 'rejected',
+                    comment: rejectionReason || 'Deposit rejected',
+                    processedBy: req.user.id,
+                    processedAt: new Date(),
+                    updatedAt: new Date()
+                }
+            });
         }
 
         // Log activity

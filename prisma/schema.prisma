@@ -25,7 +25,7 @@ model User {
   transactions     Transaction[]
   kyc              KYC?
   mt5Accounts      MT5Account[]
-  manualDeposits   ManualDeposit[]
+  deposits         Deposit[]
   withdrawals      Withdrawal[]
   activityLogs     ActivityLog[]
 }
@@ -49,87 +49,142 @@ model KYC {
 }
 
 model MT5Account {
-      id               String           @id @default(uuid())
-      accountId        String           @unique // MT5 Account ID from API response
-      userId           String           // Link to User table
-      user             User             @relation(fields: [userId], references: [id])
-      createdAt        DateTime         @default(now())
+  id               String           @id @default(uuid())
+  accountId        String           @unique // MT5 Account ID from API response
+  userId           String           // Link to User table
+  user             User             @relation(fields: [userId], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
-      mt5Transactions  MT5Transaction[]
-      manualDeposits   ManualDeposit[]
-  }
+  mt5Transactions  MT5Transaction[]
+  deposits         Deposit[]
+}
+
 model MT5Transaction {
-  id               String      @id @default(uuid())
-  type             String      // "Deposit" or "Withdrawal"
-  amount           Float
-  status           String      @default("pending") // "pending", "completed", "failed"
-  paymentMethod    String?     // "crypto", "card", "bank"
-  transactionId    String?     // External payment gateway ID
-  comment          String?
-  mt5Account       MT5Account  @relation(fields: [mt5AccountId], references: [id])
-  mt5AccountId     String
-  createdAt        DateTime    @default(now())
+  id                    String      @id @default(uuid())
+  type                  String      // "Deposit" or "Withdrawal"
+  amount                Float
+  currency              String      @default("USD")
+  status                String      @default("pending") // "pending", "completed", "failed", "rejected"
+  paymentMethod         String?     // "crypto", "card", "bank", "manual"
+  transactionId         String?     // External payment gateway ID or transaction hash
+  comment               String?
+  depositId             String?     // Link to Deposit record
+  withdrawalId          String?     // Link to Withdrawal record
+  userId                String?     // User who made the transaction
+  processedBy           String?     // Admin who processed (approved/rejected)
+  processedAt           DateTime?   // When the transaction was processed
+  mt5Account            MT5Account  @relation(fields: [mt5AccountId], references: [id])
+  mt5AccountId          String
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([mt5AccountId])
+  @@index([userId])
+  @@index([depositId])
+  @@index([withdrawalId])
+  @@index([status])
+  @@index([type])
 }
 
 // Add the missing Account Model
 model Account {
   id              String    @id @default(uuid())
-  // A foreign key back to the User model
   userId          String
   user            User      @relation(fields: [userId], references: [id])
   accountType     String    // e.g., 'trading', 'wallet'
   balance         Float     @default(0)
-  // ... other account fields
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
-// Add the missing Transaction Model
+// Comprehensive Transaction Model for all transaction types
 model Transaction {
-  id              String    @id @default(uuid())
-  // A foreign key back to the User model
+  id              String      @id @default(uuid())
   userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  type            String    // e.g., 'deposit', 'withdrawal', 'transfer'
+  user            User        @relation(fields: [userId], references: [id])
+  type            String      // 'deposit', 'withdrawal', 'transfer'
   amount          Float
-  status          String    @default("pending")
-  // ... other transaction fields
+  currency        String      @default("USD")
+  status          String      @default("pending") // "pending", "completed", "failed", "rejected"
+  paymentMethod   String?
+  transactionId   String?
+  description     String?
+  metadata        String?     // JSON string for additional data
+  depositId       String?
+  deposit         Deposit?    @relation(fields: [depositId], references: [id])
+  withdrawalId    String?
+  withdrawal      Withdrawal? @relation(fields: [withdrawalId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([depositId])
+  @@index([withdrawalId])
+  @@index([status])
+  @@index([type])
 }
 
-// Manual Deposit Model for USDT Manual deposits
-model ManualDeposit {
-  id                String      @id @default(uuid())
-  userId            String
-  user              User        @relation(fields: [userId], references: [id])
-  mt5AccountId      String      // MT5 Account ID
-  mt5Account        MT5Account  @relation(fields: [mt5AccountId], references: [accountId])
-  amount            Float       // Deposit amount
-  depositAddress    String      // Twinxa7902309skjhfsdlhflksjdhlkLL
-  transactionHash   String?     // User provided transaction hash
-  proofFileUrl      String?     // Uploaded proof file URL
-  status            String      @default("pending") // "pending", "approved", "rejected"
-  rejectionReason   String?     // Reason for rejection
-  approvedAt        DateTime?   // When approved
-  rejectedAt        DateTime?   // When rejected
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+// Comprehensive Deposit Model
+model Deposit {
+  id                      String        @id @default(uuid())
+  userId                  String
+  user                    User          @relation(fields: [userId], references: [id])
+  mt5AccountId            String
+  mt5Account              MT5Account    @relation(fields: [mt5AccountId], references: [accountId])
+  amount                  Float
+  currency                String        @default("USD")
+  method                  String        // "manual", "crypto", "card", "bank"
+  paymentMethod           String?
+  transactionHash         String?       // User provided transaction hash
+  proofFileUrl            String?       // Uploaded proof file URL
+  bankDetails             String?       // JSON string for bank details
+  cryptoAddress           String?       // Crypto address for deposit
+  depositAddress          String?       // System deposit address
+  externalTransactionId   String?       // External payment gateway transaction ID
+  status                  String        @default("pending") // "pending", "approved", "rejected", "failed"
+  rejectionReason         String?
+  approvedBy              String?       // Admin user ID who approved
+  approvedAt              DateTime?
+  rejectedAt              DateTime?
+  processedAt             DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  transactions            Transaction[]
+
+  @@index([userId])
+  @@index([mt5AccountId])
+  @@index([status])
+  @@index([createdAt])
 }
 
-// Withdrawal Model for withdrawal requests
+// Comprehensive Withdrawal Model
 model Withdrawal {
-  id                String      @id @default(uuid())
-  userId            String
-  user              User        @relation(fields: [userId], references: [id])
-  mt5AccountId      String      // MT5 Account ID
-  amount            Float       // Withdrawal amount
-  method            String      // "bank", "crypto", "card"
-  bankDetails       String?     // JSON string for bank details
-  cryptoAddress     String?     // Crypto wallet address
-  status            String      @default("pending") // "pending", "approved", "rejected"
-  rejectionReason   String?     // Reason for rejection
-  approvedBy        String?     // Admin user ID who approved
-  approvedAt        DateTime?   // When approved
-  rejectedAt        DateTime?   // When rejected
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id                      String        @id @default(uuid())
+  userId                  String
+  user                    User          @relation(fields: [userId], references: [id])
+  mt5AccountId            String        // MT5 Account ID
+  amount                  Float
+  currency                String        @default("USD")
+  method                  String        // "bank", "crypto", "card"
+  paymentMethod           String?
+  bankDetails             String?       // JSON string for bank details
+  cryptoAddress           String?       // Crypto wallet address
+  walletAddress           String?       // Alternative wallet address field
+  externalTransactionId   String?       // External payment gateway transaction ID
+  status                  String        @default("pending") // "pending", "approved", "rejected", "failed"
+  rejectionReason         String?
+  approvedBy              String?       // Admin user ID who approved
+  approvedAt              DateTime?
+  rejectedAt              DateTime?
+  processedAt             DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  transactions            Transaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // Activity Log Model for admin actions

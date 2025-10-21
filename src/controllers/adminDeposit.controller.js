@@ -172,6 +172,21 @@ export const approveDeposit = async (req, res) => {
       );
 
       if (!mt5Response.success) {
+        // Update MT5 transaction to failed
+        await prisma.MT5Transaction.updateMany({
+          where: { 
+            depositId: id,
+            status: 'pending'
+          },
+          data: {
+            status: 'failed',
+            comment: `MT5 deposit failed - ${mt5Response.message || 'Unknown error'}`,
+            processedBy: req.user.id,
+            processedAt: new Date(),
+            updatedAt: new Date()
+          }
+        });
+
         return res.status(400).json({
           success: false,
           message: 'Failed to deposit to MT5 account',
@@ -180,11 +195,13 @@ export const approveDeposit = async (req, res) => {
       }
 
       // Update deposit status
-      const updatedDeposit = await prisma.ManualDeposit.update({
+      const updatedDeposit = await prisma.Deposit.update({
         where: { id },
         data: {
           status: 'approved',
-          approvedAt: new Date()
+          approvedBy: req.user.id,
+          approvedAt: new Date(),
+          processedAt: new Date()
         },
         include: {
           user: {
@@ -197,16 +214,28 @@ export const approveDeposit = async (req, res) => {
         }
       });
 
-      // Create MT5 transaction record
-      await prisma.MT5Transaction.create({
+      // Update existing MT5 transaction record to completed
+      await prisma.MT5Transaction.updateMany({
+        where: { 
+          depositId: id,
+          status: 'pending'
+        },
         data: {
-          type: 'Deposit',
-          amount: deposit.amount,
           status: 'completed',
-          paymentMethod: 'manual',
-          transactionId: deposit.transactionHash || deposit.id,
+          processedBy: req.user.id,
+          processedAt: new Date(),
           comment: comment || `Manual deposit approved - ${deposit.id}`,
-          mt5AccountId: deposit.mt5AccountId
+          updatedAt: new Date()
+        }
+      });
+
+      // Update linked transaction status to completed
+      await prisma.Transaction.updateMany({
+        where: { depositId: id },
+        data: {
+          status: 'completed',
+          transactionId: deposit.transactionHash || deposit.id,
+          updatedAt: new Date()
         }
       });
 
@@ -233,6 +262,22 @@ export const approveDeposit = async (req, res) => {
       });
     } catch (mt5Error) {
       console.error('MT5 API error:', mt5Error);
+      
+      // Update MT5 transaction to failed
+      await prisma.MT5Transaction.updateMany({
+        where: { 
+          depositId: id,
+          status: 'pending'
+        },
+        data: {
+          status: 'failed',
+          comment: `MT5 deposit error - ${mt5Error.message}`,
+          processedBy: req.user.id,
+          processedAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+
       return res.status(500).json({
         success: false,
         message: 'Failed to process MT5 deposit',
@@ -289,7 +334,7 @@ export const rejectDeposit = async (req, res) => {
     }
 
     // Update deposit status
-    const updatedDeposit = await prisma.ManualDeposit.update({
+    const updatedDeposit = await prisma.Deposit.update({
       where: { id },
       data: {
         status: 'rejected',
@@ -304,6 +349,30 @@ export const rejectDeposit = async (req, res) => {
             email: true
           }
         }
+      }
+    });
+
+    // Update MT5 transaction to rejected
+    await prisma.MT5Transaction.updateMany({
+      where: { 
+        depositId: id,
+        status: 'pending'
+      },
+      data: {
+        status: 'rejected',
+        comment: rejectionReason || 'Deposit rejected',
+        processedBy: req.user.id,
+        processedAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+
+    // Update linked transaction status to rejected
+    await prisma.Transaction.updateMany({
+      where: { depositId: id },
+      data: {
+        status: 'rejected',
+        updatedAt: new Date()
       }
     });
 
