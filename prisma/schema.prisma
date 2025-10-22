@@ -28,7 +28,6 @@ model User {
   deposits      Deposit[]     @relation("deposits")
   withdrawals   Withdrawal[]  @relation("withdrawals")
   activityLogs  ActivityLog[] @relation("activityLogs")
-  paymentMethods PaymentMethod[] @relation("paymentMethods")
 }
 
 model KYC {
@@ -231,24 +230,4 @@ model UserRole {
   roleId     String
   assignedAt DateTime @default(now())
   assignedBy String // Admin who assigned the role
-}
-
-// Payment Methods Model for user withdrawal methods
-model PaymentMethod {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation("paymentMethods", fields: [userId], references: [id])
-  address     String   // USDT TRC20 address
-  currency    String   @default("USDT") // Only USDT for now
-  network     String   @default("TRC20")
-  status      String   @default("pending") // "pending", "approved", "rejected"
-  submittedAt DateTime @default(now())
-  approvedAt  DateTime?
-  approvedBy  String? // Admin who approved
-  rejectionReason String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([userId])
-  @@index([status])
 }

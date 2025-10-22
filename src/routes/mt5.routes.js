@@ -26,7 +26,10 @@ router.get('/Users/:login/getClientProfile', protect, mt5Controller.getUserProfi
 // 2.6 Get User's MT5 Accounts from Database
 router.get('/mt5/user-accounts', protect, mt5Controller.getUserAccounts);
 
-// 2.7 Store MT5 Account in Database (No auth required - userId passed directly)
+// 2.7 Internal Transfer API
+router.post('/internal-transfer', protect, mt5Controller.internalTransfer);
+
+// 2.8 Store MT5 Account in Database (No auth required - userId passed directly)
 router.post('/mt5/store-account', mt5Controller.storeAccount);
 
 export default router;
