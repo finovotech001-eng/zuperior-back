@@ -162,6 +162,21 @@ export const getTransactions = async (req, res) => {
 
     const depositMap = deposits.map(mapDepositToResponse);
     const withdrawalMap = withdrawals.map(mapWithdrawalToResponse);
+    
+    // Map MT5 transactions including Internal Transfers
+    const mt5TransactionsMap = mt5Transactions.map((tx) => ({
+      id: tx.id,
+      login: accountId,
+      open_time: tx.createdAt,
+      amount: tx.amount,
+      profit: tx.type === 'Internal Transfer Out' || tx.type === 'Withdrawal' ? -tx.amount : tx.amount,
+      comment: tx.comment || tx.type,
+      type: tx.type,
+      status: tx.status || 'completed',
+      account_id: accountId,
+      transactionId: tx.transactionId,
+      paymentMethod: tx.paymentMethod,
+    }));
 
     const latestStatus =
       mt5Transactions.find((tx) => tx.status)?.status ||
@@ -176,10 +191,14 @@ export const getTransactions = async (req, res) => {
       lead_id: mt5Account.userId,
       deposits: depositMap,
       withdrawals: withdrawalMap,
+      mt5Transactions: mt5TransactionsMap,
       bonuses: [],
       transactions_summary: {
         total_deposits: depositMap.length,
         total_withdrawals: withdrawalMap.length,
+        total_internal_transfers: mt5TransactionsMap.filter(tx => 
+          tx.type === 'Internal Transfer In' || tx.type === 'Internal Transfer Out'
+        ).length,
         last_status: latestStatus,
       },
     });

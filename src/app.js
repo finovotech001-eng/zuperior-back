@@ -29,6 +29,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"]
 })); // CORS configured to allow all origins
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Add multer upload to request object for routes that need it
 app.use('/api/deposit/create', (req, res, next) => {

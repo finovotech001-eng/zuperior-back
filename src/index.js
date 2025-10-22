@@ -115,6 +115,15 @@ async function main() {
             } catch (error) {
                 console.error('Failed to load Admin routes:', error.message);
             }
+
+            // Register Internal Transfer routes
+            try {
+                const internalTransferRoutes = await import('./routes/internalTransfer.routes.js');
+                app.use('/api', internalTransferRoutes.default);
+                console.log('Internal Transfer routes registered at /api/internal-transfer');
+            } catch (error) {
+                console.error('Failed to load Internal Transfer routes:', error.message);
+            }
         });
     } catch (error) {
         console.error('Failed to start server or connect to database:', error);

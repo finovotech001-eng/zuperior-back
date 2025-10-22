@@ -139,33 +139,42 @@ export const internalTransfer = async (req, res) => {
             const destNewBalance = depositResponse.Data?.Balance;
             console.log(`✅ Successfully added to ${toAccount}. New balance: $${destNewBalance}`);
 
-            // Step 3: Create transaction records for audit trail
+            // Step 3: Create transaction records for audit trail with "Internal Transfer" type
             const transferId = `INT_${Date.now()}_${fromAccount}_${toAccount}`;
 
-            const [sourceTransaction, destTransaction] = await Promise.all([
-                tx.MT5Transaction.create({
-                    data: {
-                        type: 'Withdrawal',
-                        amount: transferAmount,
-                        status: 'completed',
-                        comment: comment || `Internal transfer to ${toAccount}`,
-                        mt5AccountId: fromAcc.id,
-                        transactionId: `${transferId}_WDR`
-                    }
-                }),
-                tx.MT5Transaction.create({
-                    data: {
-                        type: 'Deposit',
-                        amount: transferAmount,
-                        status: 'completed',
-                        comment: comment || `Internal transfer from ${fromAccount}`,
-                        mt5AccountId: toAcc.id,
-                        transactionId: `${transferId}_DEP`
-                    }
-                })
-            ]);
+            // Create source transaction (debit from source account)
+            const sourceTransaction = await tx.MT5Transaction.create({
+                data: {
+                    type: 'Internal Transfer Out',
+                    amount: transferAmount,
+                    status: 'completed',
+                    comment: comment || `Internal transfer to account ${toAccount}`,
+                    mt5AccountId: fromAcc.id,
+                    transactionId: `${transferId}_OUT`,
+                    userId: userId,
+                    paymentMethod: 'internal_transfer',
+                    processedAt: new Date()
+                }
+            });
 
-            console.log(`✅ Transaction records created: ${sourceTransaction.id}, ${destTransaction.id}`);
+            // Create destination transaction (credit to destination account) and link to source
+            const destTransaction = await tx.MT5Transaction.create({
+                data: {
+                    type: 'Internal Transfer In',
+                    amount: transferAmount,
+                    status: 'completed',
+                    comment: `${comment || 'Internal transfer'} from account ${fromAccount} (Ref: ${sourceTransaction.id})`,
+                    mt5AccountId: toAcc.id,
+                    transactionId: `${transferId}_IN`,
+                    userId: userId,
+                    paymentMethod: 'internal_transfer',
+                    processedAt: new Date()
+                }
+            });
+
+            console.log(`✅ Internal Transfer transactions created:`);
+            console.log(`   - Source (OUT): ${sourceTransaction.id} | Account: ${fromAccount} | Amount: -$${transferAmount}`);
+            console.log(`   - Destination (IN): ${destTransaction.id} | Account: ${toAccount} | Amount: +$${transferAmount}`);
 
             return {
                 transferId,

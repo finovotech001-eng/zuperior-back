@@ -61,12 +61,12 @@ model MT5Account {
 
 model MT5Transaction {
   id            String     @id @default(uuid())
-  type          String // "Deposit" or "Withdrawal"
+  type          String // "Deposit", "Withdrawal", "Internal Transfer In", "Internal Transfer Out"
   amount        Float
   currency      String     @default("USD")
   status        String     @default("pending") // "pending", "completed", "failed", "rejected"
-  paymentMethod String? // "crypto", "card", "bank", "manual"
-  transactionId String? // External payment gateway ID or transaction hash
+  paymentMethod String? // "crypto", "card", "bank", "manual", "internal_transfer"
+  transactionId String? // External payment gateway ID, transaction hash, or internal transfer ID
   comment       String?
   depositId     String? // Link to Deposit record
   withdrawalId  String? // Link to Withdrawal record

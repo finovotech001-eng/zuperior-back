@@ -58,6 +58,38 @@ const mt5Request = async (method, endpoint, data = null) => {
     }
 };
 
+/**
+ * Raw MT5 request that returns the full response object (includes Success, Data, Message)
+ * Used for operations that need to check the Success status
+ */
+const mt5RequestRaw = async (method, endpoint, data = null) => {
+    try {
+        const url = `${MT5_BASE_URL}/${endpoint}`;
+        console.log(`🔄 MT5 API Call (Raw): ${method} ${url}`);
+        console.log('📤 Request Data:', data);
+
+        const response = await axios({
+            method: method.toLowerCase(),
+            url: url,
+            data: data,
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        console.log('📥 Raw MT5 API Response:', response.data);
+        return response.data; // Return the full response object
+
+    } catch (error) {
+        const errorMessage = error.response
+            ? `MT5 HTTP Error ${error.response.status}: ${error.response.statusText}`
+            : error.message;
+
+        console.error('🚨 MT5 API Network Error:', errorMessage);
+        throw new Error(`Failed to communicate with MT5 Manager: ${errorMessage}`);
+    }
+};
+
 // --- Exported Functions matching your Roadmap ---
 
 // 4.1 Get Groups API
@@ -71,17 +103,17 @@ export const openMt5Account = (userData) => {
     return mt5Request('POST', 'Users', userData);
 };
 
-// 4.3 Deposit (Add Balance)
+// 4.3 Deposit (Add Balance) - Returns full response object
 export const depositMt5Balance = (login, amount, comment) => {
     const endpoint = `Users/${login}/AddClientBalance`;
-    return mt5Request('POST', endpoint, { balance: amount, comment });
+    return mt5RequestRaw('POST', endpoint, { balance: amount, comment });
 };
 
-// 4.4 Withdraw (Deduct Balance)
+// 4.4 Withdraw (Deduct Balance) - Returns full response object
 export const withdrawMt5Balance = (login, amount, comment) => {
     const endpoint = `Users/${login}/DeductClientBalance`;
     // Note: DeductClientBalance usually takes a positive amount to deduct
-    return mt5Request('POST', endpoint, { balance: amount, comment });
+    return mt5RequestRaw('POST', endpoint, { balance: amount, comment });
 };
 
 // 4.5 Get User Profile
