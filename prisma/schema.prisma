@@ -28,6 +28,7 @@ model User {
   deposits      Deposit[]     @relation("deposits")
   withdrawals   Withdrawal[]  @relation("withdrawals")
   activityLogs  ActivityLog[] @relation("activityLogs")
+  paymentMethods PaymentMethod[] @relation("paymentMethods")
 }
 
 model KYC {
@@ -221,6 +222,25 @@ model Role {
   description String? // Role description
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// Payment Method Model for user wallet addresses
+model PaymentMethod {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation("paymentMethods", fields: [userId], references: [id])
+  address         String // Wallet address
+  currency        String   @default("USDT")
+  network         String   @default("TRC20")
+  status          String   @default("pending") // "pending", "approved", "rejected"
+  approvedAt      DateTime?
+  approvedBy      String? // Admin user ID who approved
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }
 
 // User Role Model for many-to-many relationship
