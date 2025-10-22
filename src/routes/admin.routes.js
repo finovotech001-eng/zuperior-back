@@ -18,12 +18,13 @@ router.use(protect);
 router.use(authorize(['admin']));
 
 // User Management Routes
+router.get('/users/export/csv', adminController.exportUsers);
 router.get('/users', adminController.getAllUsers);
+router.get('/users/:id/mt5-accounts', adminController.getUserMt5Accounts);
+router.get('/users/:id/stats', adminController.getUserStats);
+router.get('/users/:id/ban', adminController.banUser);
 router.get('/users/:id', adminController.getUserById);
 router.put('/users/:id', adminController.updateUser);
-router.put('/users/:id/ban', adminController.banUser);
-router.get('/users/:id/stats', adminController.getUserStats);
-router.get('/users/export/csv', adminController.exportUsers);
 
 // Deposit Management Routes
 router.get('/deposits', adminDepositController.getAllManualDeposits);

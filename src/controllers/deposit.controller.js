@@ -1,8 +1,10 @@
 // server/src/controllers/deposit.controller.js
 
+console.log('Deposit controller loaded');
+
 import { PrismaClient } from '@prisma/client';
-import { depositMt5Balance } from '../services/mt5.service.js';
-import { logActivity } from './activityLog.controller.js';
+import { depositMt5Balance } from '../services/mt5.service';
+import { logActivity } from './activityLog.controller';
 
 const prisma = new PrismaClient();
 
@@ -610,6 +612,78 @@ export const getDepositStats = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch deposit statistics'
+        });
+    }
+};
+
+// Get transactions by MT5 account ID
+export const getTransactionsByAccountId = async (req, res) => {
+    try {
+        const { accountId } = req.params;
+        const userId = req.user.id; // Ensure user can only access their own data
+
+        // Verify the MT5 account belongs to the authenticated user
+        const account = await prisma.MT5Account.findFirst({
+            where: {
+                accountId: accountId,
+                userId: userId
+            }
+        });
+
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: 'MT5 account not found or access denied'
+            });
+        }
+
+        // Fetch transactions related to deposits for this account
+        const transactions = await prisma.Transaction.findMany({
+            where: {
+                deposit: {
+                    mt5AccountId: accountId
+                }
+            },
+            include: {
+                deposit: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true
+                            }
+                        }
+                    }
+                },
+                withdrawal: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        console.log(`✅ Retrieved ${transactions.length} transactions for account ${accountId}`);
+
+        res.json({
+            success: true,
+            message: 'Transactions retrieved successfully',
+            data: transactions
+        });
+
+    } catch (error) {
+        console.error('Error fetching transactions by account ID:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Internal server error'
         });
     }
 };

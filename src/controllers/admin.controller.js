@@ -494,3 +494,60 @@ export const exportUsers = async (req, res) => {
     });
   }
 };
+
+// Get MT5 accounts for a specific user (Admin)
+export const getUserMt5Accounts = async (req, res) => {
+  try {
+    const { id: userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    // Verify user exists
+    const user = await prisma.User.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Fetch MT5 accounts for the user
+    const accounts = await prisma.MT5Account.findMany({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    console.log('🔍 Admin fetching MT5 accounts for user:', userId);
+    console.log('📊 Number of accounts found:', accounts.length);
+
+    res.json({
+      success: true,
+      message: 'MT5 accounts retrieved successfully',
+      data: {
+        accounts: accounts.map(account => ({
+          id: account.id,
+          accountId: account.accountId,
+          balance: account.balance,
+          equity: account.equity,
+          isEnabled: account.isEnabled,
+          createdAt: account.createdAt
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user MT5 accounts:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error'
+    });
+  }
+};

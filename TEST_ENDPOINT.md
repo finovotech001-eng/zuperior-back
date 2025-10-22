@@ -36,3 +36,4 @@ That means the request is NOT reaching the backend. The issue is in the Next.js 
 
 The backend will show exactly what's wrong.
 
+

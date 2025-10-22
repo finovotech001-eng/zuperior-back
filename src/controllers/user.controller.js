@@ -1,4 +1,4 @@
-import { getUserByEmail } from '../services/db.service.js';
+import prisma, { getUserByEmail } from '../services/db.service.js';
 
 export const getUser = async (req, res) => {
   try {
@@ -42,6 +42,153 @@ export const getUser = async (req, res) => {
       status: 'Error',
       message: 'Internal server error',
       error: error.message
+    });
+  }
+};
+
+const parseDate = (value) => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date;
+  }
+  const isoLike = new Date(`${value}T00:00:00Z`);
+  if (!Number.isNaN(isoLike.getTime())) {
+    return isoLike;
+  }
+  return undefined;
+};
+
+const toEndOfDay = (date) => {
+  if (!date) return undefined;
+  const end = new Date(date);
+  end.setUTCHours(23, 59, 59, 999);
+  return end;
+};
+
+const mapDepositToResponse = (deposit) => ({
+  depositID: deposit.id,
+  login: deposit.mt5AccountId,
+  open_time: deposit.createdAt?.toISOString?.() ?? deposit.createdAt,
+  profit: deposit.amount?.toString?.() ?? String(deposit.amount ?? 0),
+  comment: deposit.transactionHash || deposit.method || deposit.paymentMethod || '',
+  source: deposit.method || 'Deposit',
+  status: deposit.status || 'pending',
+});
+
+const mapWithdrawalToResponse = (withdrawal) => ({
+  depositID: withdrawal.id,
+  login: withdrawal.mt5AccountId,
+  open_time: withdrawal.createdAt?.toISOString?.() ?? withdrawal.createdAt,
+  profit: withdrawal.amount?.toString?.() ?? String(withdrawal.amount ?? 0),
+  comment: withdrawal.walletAddress || withdrawal.bankDetails || withdrawal.method || '',
+  source: withdrawal.method || 'Withdrawal',
+  status: withdrawal.status || 'pending',
+});
+
+export const getTransactions = async (req, res) => {
+  try {
+    const {
+      request,
+      account_number: rawAccountNumber,
+      accountId: aliasAccountId,
+      start_date: rawStart,
+      end_date: rawEnd,
+    } = req.body || {};
+
+    if (request && request !== 'GetTransactions') {
+      return res.status(400).json({
+        status: 'Error',
+        message: 'Invalid request type',
+      });
+    }
+
+    const accountId = rawAccountNumber || aliasAccountId;
+
+    if (!accountId) {
+      return res.status(400).json({
+        status: 'Error',
+        message: 'Account number is required',
+      });
+    }
+
+    const fromDate = parseDate(rawStart);
+    const toDate = toEndOfDay(parseDate(rawEnd));
+
+    const dateFilter =
+      fromDate || toDate
+        ? {
+            createdAt: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {};
+
+    const [mt5Account, deposits, withdrawals, mt5Transactions] = await Promise.all([
+      prisma.mT5Account.findFirst({
+        where: { accountId },
+        select: { id: true, userId: true },
+      }),
+      prisma.Deposit.findMany({
+        where: {
+          mt5AccountId: accountId,
+          ...dateFilter,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.Withdrawal.findMany({
+        where: {
+          mt5AccountId: accountId,
+          ...dateFilter,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.MT5Transaction.findMany({
+        where: {
+          mt5Account: { accountId },
+          ...dateFilter,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    if (!mt5Account) {
+      return res.status(404).json({
+        status: 'Error',
+        message: 'MT5 account not found',
+      });
+    }
+
+    const depositMap = deposits.map(mapDepositToResponse);
+    const withdrawalMap = withdrawals.map(mapWithdrawalToResponse);
+
+    const latestStatus =
+      mt5Transactions.find((tx) => tx.status)?.status ||
+      depositMap[0]?.status ||
+      withdrawalMap[0]?.status ||
+      'pending';
+
+    return res.status(200).json({
+      status: 'Success',
+      status_code: '1',
+      MT5_account: accountId,
+      lead_id: mt5Account.userId,
+      deposits: depositMap,
+      withdrawals: withdrawalMap,
+      bonuses: [],
+      transactions_summary: {
+        total_deposits: depositMap.length,
+        total_withdrawals: withdrawalMap.length,
+        last_status: latestStatus,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    return res.status(500).json({
+      status: 'Error',
+      message: 'Internal server error',
+      error: error.message,
     });
   }
 };

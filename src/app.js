@@ -1,8 +1,8 @@
 // server/src/app.js
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const multer = require('multer');
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import multer from 'multer';
 
 dotenv.config();
 const app = express();
@@ -12,12 +12,12 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // Import Routes
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const mt5Routes = require('./routes/mt5.routes');
-const depositRoutes = require('./routes/deposit.routes');
-const adminRoutes = require('./routes/admin.routes');
-const kycRoutes = require('./routes/kyc.routes');
+import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js';
+import mt5Routes from './routes/mt5.routes.js';
+import depositRoutes from './routes/deposit.routes.js';
+import adminRoutes from './routes/admin.routes.js';
+import kycRoutes from './routes/kyc.routes.js';
 // ... import other routes (txRoutes, kycRoutes)
 
 // Middleware
