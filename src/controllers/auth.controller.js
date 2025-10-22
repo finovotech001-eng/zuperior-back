@@ -9,6 +9,33 @@ const prisma = new PrismaClient();
 // Secret key for JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
+const TOKEN_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
+
+const buildCookieOptions = (overrides = {}) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/',
+  maxAge: TOKEN_MAX_AGE_MS,
+  ...overrides,
+});
+
+const setAuthCookies = (res, { token, clientId }) => {
+  if (!token) return;
+
+  res.cookie('token', token, buildCookieOptions());
+
+  if (clientId) {
+    res.cookie(
+      'clientId',
+      clientId,
+      buildCookieOptions({
+        httpOnly: false,
+      })
+    );
+  }
+};
+
 /**
  * Handles the registration (signup) of a new user.
  */
@@ -52,6 +79,7 @@ export const register = async (req, res) => {
         );
 
         // 6. Send success response
+        setAuthCookies(res, { token, clientId: newUser.clientId });
         res.status(201).json({
             token,
             clientId: newUser.clientId,
@@ -101,6 +129,7 @@ export const login = async (req, res) => {
         );
 
         // 5. Send success response
+        setAuthCookies(res, { token, clientId: user.clientId });
         res.status(200).json({
             token,
             clientId: user.clientId,

@@ -46,6 +46,59 @@ export const getUser = async (req, res) => {
   }
 };
 
+export const getProfile = async (req, res) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+
+    const user = await prisma.User.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        clientId: true,
+        name: true,
+        email: true,
+        phone: true,
+        country: true,
+        status: true,
+        emailVerified: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    const nameParts = (user.name || '').trim().split(/\s+/).filter(Boolean);
+    const firstName = nameParts[0] || null;
+    const lastName = nameParts.slice(1).join(' ') || null;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...user,
+        firstName,
+        lastName,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch profile',
+      error: error.message,
+    });
+  }
+};
+
 const parseDate = (value) => {
   if (!value) return undefined;
   const date = new Date(value);

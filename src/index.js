@@ -16,11 +16,18 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 
 // --- Middleware ---
-app.use(cors({
-    // Allow the client (Next.js) to access the API
-    origin: '*',
-    credentials: true
-}));
+const defaultClientOrigin = 'http://localhost:3000';
+const allowedOrigins = (process.env.CLIENT_URL || defaultClientOrigin)
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+app.use(
+    cors({
+        origin: allowedOrigins,
+        credentials: true,
+    })
+);
 
 // Configure multer for file uploads
 const upload = multer({
@@ -68,7 +75,7 @@ app.get('/', (req, res) => {
 
 // --- Routes ---
 app.use('/api', authRoutes); // Authentication routes (Login/Register)
-app.use('/api', userRoutes);
+app.use('/api/user', userRoutes);
 
 // --- Start Server ---
 async function main() {
