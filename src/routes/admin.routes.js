@@ -10,6 +10,7 @@ import * as adminDepositController from '../controllers/adminDeposit.controller.
 import * as adminKycController from '../controllers/adminKyc.controller.js';
 import * as adminWithdrawalController from '../controllers/adminWithdrawal.controller.js';
 import * as activityLogController from '../controllers/activityLog.controller.js';
+import * as paymentMethodController from '../controllers/paymentMethod.controller.js';
 
 const router = express.Router();
 
@@ -46,6 +47,11 @@ router.get('/withdrawals/:id', adminWithdrawalController.getWithdrawalById);
 router.put('/withdrawals/:id/approve', adminWithdrawalController.approveWithdrawal);
 router.put('/withdrawals/:id/reject', adminWithdrawalController.rejectWithdrawal);
 router.get('/withdrawals/stats', adminWithdrawalController.getWithdrawalStats);
+
+// Payment Method Management Routes
+router.get('/payment-methods', paymentMethodController.getAllPaymentMethods);
+router.put('/payment-methods/:id/approve', paymentMethodController.approvePaymentMethod);
+router.put('/payment-methods/:id/reject', paymentMethodController.rejectPaymentMethod);
 
 // Activity Log Routes
 router.get('/activity-logs', activityLogController.getActivityLogs);

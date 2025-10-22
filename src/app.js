@@ -21,12 +21,20 @@ import kycRoutes from './routes/kyc.routes.js';
 // ... import other routes (txRoutes, kycRoutes)
 
 // Middleware
-app.use(cors({
-  origin: "*", // Allow all origins
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-})); // CORS configured to allow all origins
+const defaultOrigin = "http://localhost:3000";
+const corsOrigins = (process.env.CLIENT_URL || defaultOrigin)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: corsOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+); // CORS configured to allow trusted origins
 app.use(express.json());
 
 // Add multer upload to request object for routes that need it

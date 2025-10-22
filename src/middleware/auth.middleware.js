@@ -8,19 +8,45 @@ const prisma = new PrismaClient();
 // JWT Secret - should match the one used in auth.controller.js
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
+const parseCookies = (cookieHeader = '') =>
+  cookieHeader.split(';').reduce((accumulator, cookiePair) => {
+    const trimmed = cookiePair.trim();
+    if (!trimmed) return accumulator;
+    const [key, ...rest] = trimmed.split('=');
+    if (!key) return accumulator;
+    accumulator[key] = decodeURIComponent(rest.join('='));
+    return accumulator;
+  }, {});
+
+const extractToken = (req) => {
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer ')
+  ) {
+    return req.headers.authorization.split(' ')[1];
+  }
+
+  if (req.headers.cookie) {
+    const cookies = parseCookies(req.headers.cookie);
+    if (cookies.token) return cookies.token;
+  }
+
+  if (req.cookies?.token) {
+    return req.cookies.token;
+  }
+
+  return null;
+};
+
 // Middleware to protect routes
 export const protect = async (req, res, next) => {
   try {
-    let token;
-
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
+    const token = extractToken(req);
 
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Not authorized to access this route'
+        message: 'Not authorized to access this route',
       });
     }
 
@@ -30,28 +56,29 @@ export const protect = async (req, res, next) => {
 
       // Get user from the token
       const user = await prisma.User.findFirst({
-        where: { clientId: decoded.clientId }
+        where: { clientId: decoded.clientId },
       });
 
       if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'No user found with this id'
+          message: 'No user found with this id',
         });
       }
 
       req.user = user;
+      req.token = token;
       next();
     } catch (err) {
       return res.status(401).json({
         success: false,
-        message: 'Not authorized to access this route'
+        message: 'Not authorized to access this route',
       });
     }
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Server error in auth middleware'
+      message: 'Server error in auth middleware',
     });
   }
 };
@@ -62,7 +89,7 @@ export const authorize = (roles = []) => {
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: 'Authentication required'
+        message: 'Authentication required',
       });
     }
 
@@ -75,7 +102,7 @@ export const authorize = (roles = []) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: `Access denied. Required roles: ${roles.join(', ')}`
+        message: `Access denied. Required roles: ${roles.join(', ')}`,
       });
     }
 
