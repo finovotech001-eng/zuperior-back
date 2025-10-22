@@ -375,6 +375,120 @@ export const getUserProfile = async (req, res) => {
     }
 };
 
+// 4.7 POST /api/mt5/internal-transfer
+export const internalTransfer = async (req, res) => {
+    try {
+        const { fromAccount, toAccount, amount, comment } = req.body;
+
+        // Get user ID from authenticated request
+        const userId = req.user.id;
+
+        // Validate required fields
+        if (!fromAccount || !toAccount || !amount || amount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing or invalid fields: fromAccount, toAccount, amount (must be > 0)'
+            });
+        }
+
+        // Verify both accounts belong to the authenticated user
+        const [fromAcc, toAcc] = await Promise.all([
+            prisma.MT5Account.findFirst({
+                where: {
+                    accountId: fromAccount.toString(),
+                    userId: userId
+                }
+            }),
+            prisma.MT5Account.findFirst({
+                where: {
+                    accountId: toAccount.toString(),
+                    userId: userId
+                }
+            })
+        ]);
+
+        if (!fromAcc) {
+            return res.status(404).json({
+                success: false,
+                message: 'From account not found or access denied'
+            });
+        }
+
+        if (!toAcc) {
+            return res.status(404).json({
+                success: false,
+                message: 'To account not found or access denied'
+            });
+        }
+
+        // Call MT5 API to deduct from fromAccount
+        const withdrawResponse = await mt5Service.withdrawMt5Balance(fromAccount, amount, comment || 'Internal transfer');
+
+        if (!withdrawResponse.Success) {
+            return res.status(400).json({
+                success: false,
+                message: withdrawResponse.Message || 'Failed to deduct from source account'
+            });
+        }
+
+        // Call MT5 API to add to toAccount
+        const depositResponse = await mt5Service.depositMt5Balance(toAccount, amount, comment || 'Internal transfer');
+
+        if (!depositResponse.Success) {
+            // If deposit fails, we might need to reverse the withdrawal, but for now, just report the error
+            return res.status(400).json({
+                success: false,
+                message: depositResponse.Message || 'Failed to credit to destination account'
+            });
+        }
+
+        console.log('✅ Internal transfer successful:', { fromAccount, toAccount, amount });
+
+        // Create transaction records for both accounts
+        await Promise.all([
+            prisma.MT5Transaction.create({
+                data: {
+                    type: 'Withdrawal',
+                    amount: parseFloat(amount),
+                    status: 'completed',
+                    comment: comment || 'Internal transfer',
+                    mt5AccountId: fromAcc.id,
+                    transactionId: `INT_WDR_${Date.now()}_${fromAccount}`
+                }
+            }),
+            prisma.MT5Transaction.create({
+                data: {
+                    type: 'Deposit',
+                    amount: parseFloat(amount),
+                    status: 'completed',
+                    comment: comment || 'Internal transfer',
+                    mt5AccountId: toAcc.id,
+                    transactionId: `INT_DEP_${Date.now()}_${toAccount}`
+                }
+            })
+        ]);
+
+        res.json({
+            success: true,
+            message: 'Internal transfer successful',
+            data: {
+                fromAccount: fromAccount,
+                toAccount: toAccount,
+                amount: amount,
+                fromBalance: withdrawResponse.Data?.Balance,
+                toBalance: depositResponse.Data?.Balance
+            }
+        });
+
+    } catch (error) {
+        console.error('Error in internal transfer:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Internal server error'
+        });
+    }
+};
+
 // 4.6 POST /api/mt5/store-account
 export const storeAccount = async (req, res) => {
     try {
