@@ -1,8 +1,6 @@
 // server/src/controllers/activityLog.controller.js
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import dbService from '../services/db.service.js';
 
 // Get activity logs with pagination and filters
 export const getActivityLogs = async (req, res) => {
@@ -54,7 +52,7 @@ export const getActivityLogs = async (req, res) => {
     }
 
     // Get activity logs with admin details
-    const logs = await prisma.ActivityLog.findMany({
+    const logs = await dbService.prisma.activityLog.findMany({
       where,
       include: {
         admin: {
@@ -73,7 +71,7 @@ export const getActivityLogs = async (req, res) => {
     });
 
     // Get total count for pagination
-    const total = await prisma.ActivityLog.count({ where });
+    const total = await dbService.prisma.activityLog.count({ where });
 
     res.json({
       success: true,
@@ -99,7 +97,7 @@ export const getActivityLogs = async (req, res) => {
 // Helper function to log activity
 export const logActivity = async (userId, adminId, action, entity, details = {}, ipAddress = null, userAgent = null) => {
   try {
-    await prisma.ActivityLog.create({
+    await dbService.prisma.ActivityLog.create({
       data: {
         userId,
         adminId,
@@ -127,7 +125,7 @@ export const getActivityStats = async (req, res) => {
     startDate.setDate(startDate.getDate() - parseInt(days));
 
     // Get activity counts by action
-    const actionStats = await prisma.ActivityLog.groupBy({
+    const actionStats = await dbService.prisma.activityLog.groupBy({
       by: ['action'],
       where: {
         createdAt: {
@@ -140,7 +138,7 @@ export const getActivityStats = async (req, res) => {
     });
 
     // Get activity counts by entity
-    const entityStats = await prisma.ActivityLog.groupBy({
+    const entityStats = await dbService.prisma.activityLog.groupBy({
       by: ['entity'],
       where: {
         createdAt: {
@@ -153,13 +151,13 @@ export const getActivityStats = async (req, res) => {
     });
 
     // Get daily activity counts
-    const dailyStats = await prisma.$queryRaw`
+    const dailyStats = await dbService.prisma.$queryRaw`
       SELECT 
-        DATE(created_at) as date,
+        DATE("createdAt") as date,
         COUNT(*) as count
       FROM "ActivityLog"
-      WHERE created_at >= ${startDate}
-      GROUP BY DATE(created_at)
+      WHERE "createdAt" >= ${startDate}
+      GROUP BY DATE("createdAt")
       ORDER BY date DESC
     `;
 
@@ -180,4 +178,3 @@ export const getActivityStats = async (req, res) => {
     });
   }
 };
-

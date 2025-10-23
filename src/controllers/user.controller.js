@@ -1,4 +1,5 @@
-import prisma, { getUserByEmail } from '../services/db.service.js';
+import dbService, { getUserByEmail } from '../services/db.service.js';
+import bcrypt from 'bcryptjs';
 
 export const getUser = async (req, res) => {
   try {
@@ -55,7 +56,7 @@ export const getProfile = async (req, res) => {
       });
     }
 
-    const user = await prisma.User.findUnique({
+    const user = await dbService.prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
         id: true,
@@ -179,25 +180,25 @@ export const getTransactions = async (req, res) => {
         : {};
 
     const [mt5Account, deposits, withdrawals, mt5Transactions] = await Promise.all([
-      prisma.mT5Account.findFirst({
+      dbService.prisma.mT5Account.findFirst({
         where: { accountId },
         select: { id: true, userId: true },
       }),
-      prisma.Deposit.findMany({
+      dbService.prisma.deposit.findMany({
         where: {
           mt5AccountId: accountId,
           ...dateFilter,
         },
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.Withdrawal.findMany({
+      dbService.prisma.withdrawal.findMany({
         where: {
           mt5AccountId: accountId,
           ...dateFilter,
         },
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.MT5Transaction.findMany({
+      dbService.prisma.mT5Transaction.findMany({
         where: {
           mt5Account: { accountId },
           ...dateFilter,
@@ -262,5 +263,55 @@ export const getTransactions = async (req, res) => {
       message: 'Internal server error',
       error: error.message,
     });
+  }
+};
+
+// Change password for the authenticated user
+export const changePassword = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { oldPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ success: false, message: 'All fields are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'Passwords do not match' });
+    }
+
+    if (newPassword.length < 8 || newPassword.length > 100) {
+      return res.status(400).json({ success: false, message: 'Password length must be 8-100 characters' });
+    }
+
+    const user = await dbService.prisma.user.findUnique({ where: { id: userId }, select: { id: true, password: true } });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Old password is incorrect' });
+    }
+
+    // Prevent reusing the same password
+    const sameAsOld = await bcrypt.compare(newPassword, user.password);
+    if (sameAsOld) {
+      return res.status(400).json({ success: false, message: 'New password must be different from old password' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashed = await bcrypt.hash(newPassword, salt);
+
+    await dbService.prisma.user.update({ where: { id: userId }, data: { password: hashed } });
+
+    return res.status(200).json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update password' });
   }
 };

@@ -1,5 +1,5 @@
 import express from 'express';
-import { getUser, getTransactions, getProfile } from '../controllers/user.controller.js';
+import { getUser, getTransactions, getProfile, changePassword } from '../controllers/user.controller.js';
 import { getDatabaseTransactions } from '../controllers/transactions.controller.js';
 import { createPaymentMethod, getUserPaymentMethods } from '../controllers/paymentMethod.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
@@ -12,6 +12,9 @@ router.get('/transactions/database', protect, getDatabaseTransactions);
 router.post('/transactions/database', protect, getDatabaseTransactions);
 
 router.get('/profile', protect, getProfile);
+
+// Change password (authenticated)
+router.put('/password', protect, changePassword);
 
 // Payment Methods Routes
 router.post('/payment-methods', protect, createPaymentMethod);

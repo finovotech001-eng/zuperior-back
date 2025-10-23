@@ -83,6 +83,30 @@ async function main() {
         await prisma.$connect();
         console.log('Database connected successfully.');
 
+        // Ensure minimal required tables exist if migrations haven't run
+        try {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "PaymentMethod" (
+                  "id" TEXT PRIMARY KEY,
+                  "userId" TEXT NOT NULL,
+                  "address" TEXT NOT NULL,
+                  "currency" TEXT NOT NULL DEFAULT 'USDT',
+                  "network" TEXT NOT NULL DEFAULT 'TRC20',
+                  "status" TEXT NOT NULL DEFAULT 'pending',
+                  "approvedAt" TIMESTAMP(3),
+                  "approvedBy" TEXT,
+                  "rejectionReason" TEXT,
+                  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PaymentMethod_userId_idx" ON "PaymentMethod" ("userId")`);
+            await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PaymentMethod_status_idx" ON "PaymentMethod" ("status")`);
+            console.log('Ensured PaymentMethod table exists.');
+        } catch (e) {
+            console.warn('Could not ensure PaymentMethod table:', e.message);
+        }
+
         app.listen(PORT, async () => {
             console.log(`Server is running on port ${PORT}`);
             console.log(`API URL: http://localhost:${PORT}/`);
@@ -130,6 +154,15 @@ async function main() {
                 console.log('Internal Transfer routes registered at /api/internal-transfer');
             } catch (error) {
                 console.error('Failed to load Internal Transfer routes:', error.message);
+            }
+
+            // Register Withdrawal routes
+            try {
+                const withdrawalRoutes = await import('./routes/withdrawal.routes.js');
+                app.use('/api', withdrawalRoutes.default);
+                console.log('Withdrawal routes registered at /api/withdraw/*');
+            } catch (error) {
+                console.error('Failed to load Withdrawal routes:', error.message);
             }
         });
     } catch (error) {

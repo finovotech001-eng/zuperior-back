@@ -1,10 +1,8 @@
 // zuperior-dashboard/server/src/controllers/auth.controller.js
 
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
+import dbService from '../services/db.service.js';
 
 // Secret key for JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
@@ -49,7 +47,7 @@ export const register = async (req, res) => {
 
     try {
         // 2. Check if user already exists
-        const existingUser = await prisma.User.findUnique({ where: { email } });
+        const existingUser = await dbService.prisma.User.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(409).json({ message: 'User with this email already exists.' });
         }
@@ -59,7 +57,7 @@ export const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         // 4. Save the new user to the database - include phone field
-        const newUser = await prisma.User.create({
+        const newUser = await dbService.prisma.User.create({
             data: {
                 name,
                 email,
@@ -109,7 +107,7 @@ export const login = async (req, res) => {
 
     try {
         // 2. Find the user by email
-        const user = await prisma.User.findUnique({ where: { email } });
+        const user = await dbService.prisma.User.findUnique({ where: { email } });
         if (!user) {
             return res.status(401).json({ message: 'Invalid credentials.' });
         }

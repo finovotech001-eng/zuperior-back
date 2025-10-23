@@ -2,11 +2,9 @@
 
 console.log('Deposit controller loaded');
 
-import { PrismaClient } from '@prisma/client';
-import { depositMt5Balance } from '../services/mt5.service';
-import { logActivity } from './activityLog.controller';
-
-const prisma = new PrismaClient();
+import { depositMt5Balance } from '../services/mt5.service.js';
+import { logActivity } from './activityLog.controller.js';
+import dbService from '../services/db.service.js';
 
 // Create a new deposit request
 export const createDeposit = async (req, res) => {
@@ -60,7 +58,7 @@ export const createDeposit = async (req, res) => {
 
         // Verify the MT5 account belongs to the authenticated user
         console.log('🔍 Looking up MT5 account:', { mt5AccountId, userId });
-        const account = await prisma.MT5Account.findFirst({
+        const account = await dbService.prisma.mT5Account.findFirst({
             where: {
                 accountId: mt5AccountId,
                 userId: userId
@@ -91,10 +89,10 @@ export const createDeposit = async (req, res) => {
             status: 'pending'
         });
 
-        const deposit = await prisma.Deposit.create({
+        const deposit = await dbService.prisma.deposit.create({
             data: {
                 userId: userId,
-                mt5AccountId: mt5AccountId,
+                mt5AccountId: account.id,
                 amount: parseFloat(amount),
                 currency: 'USD',
                 method: method,
@@ -108,7 +106,7 @@ export const createDeposit = async (req, res) => {
         });
 
         // Create transaction record linked to deposit
-        await prisma.Transaction.create({
+        await dbService.prisma.transaction.create({
             data: {
                 userId: userId,
                 type: 'deposit',
@@ -122,7 +120,7 @@ export const createDeposit = async (req, res) => {
         });
 
         // Create MT5 transaction record immediately when deposit is requested
-        await prisma.MT5Transaction.create({
+        await dbService.prisma.mT5Transaction.create({
             data: {
                 type: 'Deposit',
                 amount: parseFloat(amount),
@@ -133,7 +131,7 @@ export const createDeposit = async (req, res) => {
                 comment: `${method} deposit request - ${deposit.id}`,
                 depositId: deposit.id,
                 userId: userId,
-                mt5AccountId: account.id  // Use the internal MT5Account.id
+                mt5AccountId: account.id
             }
         });
 
@@ -169,7 +167,7 @@ export const getUserDeposits = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const deposits = await prisma.Deposit.findMany({
+        const deposits = await dbService.prisma.Deposit.findMany({
             where: { userId: userId },
             include: {
                 transactions: true
@@ -208,7 +206,7 @@ export const updateDepositStatus = async (req, res) => {
         }
 
         // Find the deposit
-        const deposit = await prisma.Deposit.findUnique({
+        const deposit = await dbService.prisma.Deposit.findUnique({
             where: { id: depositId },
             include: {
                 user: {
@@ -244,7 +242,7 @@ export const updateDepositStatus = async (req, res) => {
         }
 
         // Update the deposit
-        const updatedDeposit = await prisma.Deposit.update({
+        const updatedDeposit = await dbService.prisma.Deposit.update({
             where: { id: depositId },
             data: updateData,
             include: {
@@ -259,7 +257,7 @@ export const updateDepositStatus = async (req, res) => {
         });
 
         // Update linked transaction status
-        await prisma.Transaction.updateMany({
+        await dbService.prisma.Transaction.updateMany({
             where: { depositId: depositId },
             data: {
                 status: status,
@@ -280,7 +278,7 @@ export const updateDepositStatus = async (req, res) => {
                     console.log('✅ Deposit approved and MT5 balance updated');
 
                     // Update existing MT5 transaction record to completed
-                    await prisma.MT5Transaction.updateMany({
+                    await dbService.prisma.MT5Transaction.updateMany({
                         where: { 
                             depositId: depositId,
                             status: 'pending'
@@ -295,7 +293,7 @@ export const updateDepositStatus = async (req, res) => {
                     });
 
                     // Update transaction status to completed
-                    await prisma.Transaction.updateMany({
+                    await dbService.prisma.Transaction.updateMany({
                         where: { depositId: depositId },
                         data: {
                             status: 'completed',
@@ -305,9 +303,9 @@ export const updateDepositStatus = async (req, res) => {
                     });
                 } else {
                     console.error('❌ Failed to update MT5 balance:', mt5Response.Message);
-                    
+
                     // Update MT5 transaction to failed
-                    await prisma.MT5Transaction.updateMany({
+                    await dbService.prisma.MT5Transaction.updateMany({
                         where: { 
                             depositId: depositId,
                             status: 'pending'
@@ -325,8 +323,8 @@ export const updateDepositStatus = async (req, res) => {
                 console.error('❌ Error updating MT5 balance:', mt5Error);
                 
                 // Update MT5 transaction to failed
-                await prisma.MT5Transaction.updateMany({
-                    where: { 
+                await dbService.prisma.MT5Transaction.updateMany({
+                    where: {
                         depositId: depositId,
                         status: 'pending'
                     },
@@ -341,7 +339,7 @@ export const updateDepositStatus = async (req, res) => {
             }
         } else if (status === 'rejected') {
             // Update MT5 transaction to rejected
-            await prisma.MT5Transaction.updateMany({
+            await dbService.prisma.MT5Transaction.updateMany({
                 where: { 
                     depositId: depositId,
                     status: 'pending'
@@ -436,7 +434,7 @@ export const getAllDeposits = async (req, res) => {
         }
 
         // Get deposits with user info and pagination
-        const deposits = await prisma.Deposit.findMany({
+        const deposits = await dbService.prisma.Deposit.findMany({
             where,
             include: {
                 user: {
@@ -463,7 +461,7 @@ export const getAllDeposits = async (req, res) => {
         });
 
         // Get total count for pagination
-        const total = await prisma.Deposit.count({ where });
+        const total = await dbService.prisma.Deposit.count({ where });
 
         console.log(`✅ Retrieved ${deposits.length} deposits for admin`);
 
@@ -495,7 +493,7 @@ export const getDepositById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const deposit = await prisma.Deposit.findUnique({
+        const deposit = await dbService.prisma.Deposit.findUnique({
             where: { id },
             include: {
                 user: {
@@ -541,7 +539,7 @@ export const getDepositStats = async (req, res) => {
         startDate.setDate(startDate.getDate() - parseInt(days));
 
         // Get deposit counts by status
-        const statusStats = await prisma.Deposit.groupBy({
+        const statusStats = await dbService.prisma.Deposit.groupBy({
             by: ['status'],
             where: {
                 createdAt: {
@@ -557,7 +555,7 @@ export const getDepositStats = async (req, res) => {
         });
 
         // Get deposit counts by method
-        const methodStats = await prisma.Deposit.groupBy({
+        const methodStats = await dbService.prisma.Deposit.groupBy({
             by: ['method'],
             where: {
                 createdAt: {
@@ -573,7 +571,7 @@ export const getDepositStats = async (req, res) => {
         });
 
         // Get total amounts
-        const totalStats = await prisma.Deposit.aggregate({
+        const totalStats = await dbService.prisma.Deposit.aggregate({
             where: {
                 createdAt: {
                     gte: startDate
@@ -586,7 +584,7 @@ export const getDepositStats = async (req, res) => {
         });
 
         // Get daily deposit amounts
-        const dailyStats = await prisma.$queryRaw`
+        const dailyStats = await dbService.prisma.$queryRaw`
             SELECT
                 DATE(created_at) as date,
                 COUNT(*) as count,
@@ -623,7 +621,7 @@ export const getTransactionsByAccountId = async (req, res) => {
         const userId = req.user.id; // Ensure user can only access their own data
 
         // Verify the MT5 account belongs to the authenticated user
-        const account = await prisma.MT5Account.findFirst({
+        const account = await dbService.prisma.MT5Account.findFirst({
             where: {
                 accountId: accountId,
                 userId: userId
@@ -638,7 +636,7 @@ export const getTransactionsByAccountId = async (req, res) => {
         }
 
         // Fetch transactions related to deposits for this account
-        const transactions = await prisma.Transaction.findMany({
+        const transactions = await dbService.prisma.Transaction.findMany({
             where: {
                 deposit: {
                     mt5AccountId: accountId

@@ -1,10 +1,8 @@
 // server/src/controllers/deposit.controller.js
 
-import { PrismaClient, Prisma } from '@prisma/client';
 import { depositMt5Balance } from '../services/mt5.service.js';
 import { logActivity } from './activityLog.controller.js';
-
-const prisma = new PrismaClient();
+import dbService from '../services/db.service.js';
 
 // Create a new manual deposit request
 export const createManualDeposit = async (req, res) => {
@@ -58,7 +56,7 @@ export const createManualDeposit = async (req, res) => {
 
         // Verify the MT5 account belongs to the authenticated user
         console.log('🔍 Looking up MT5 account:', { mt5AccountId, userId });
-        const account = await prisma.MT5Account.findFirst({
+        const account = await dbService.prisma.mT5Account.findFirst({
             where: {
                 accountId: mt5AccountId,
                 userId: userId
@@ -94,10 +92,10 @@ export const createManualDeposit = async (req, res) => {
             status: 'pending'
         });
 
-        const deposit = await prisma.Deposit.create({
+        const deposit = await dbService.prisma.deposit.create({
             data: {
                 userId: userId,
-                mt5AccountId: mt5AccountId,
+                mt5AccountId: account.id,
                 amount: parseFloat(amount),
                 currency: 'USD',
                 method: 'manual',
@@ -113,7 +111,7 @@ export const createManualDeposit = async (req, res) => {
 
         // Create transaction record linked to deposit
         try {
-            await prisma.Transaction.create({
+            await dbService.prisma.transaction.create({
                 data: {
                     userId: userId,
                     type: 'deposit',
@@ -150,7 +148,7 @@ export const createManualDeposit = async (req, res) => {
         });
 
         try {
-            const mt5Transaction = await prisma.MT5Transaction.create({
+            const mt5Transaction = await dbService.prisma.mT5Transaction.create({
                 data: {
                     type: 'Deposit',
                     amount: parseFloat(amount),
@@ -161,7 +159,7 @@ export const createManualDeposit = async (req, res) => {
                     comment: `Manual deposit request - ${deposit.id}`,
                     depositId: deposit.id,
                     userId: userId,
-                    mt5AccountId: account.id  // Use the internal MT5Account.id
+                    mt5AccountId: account.id
                 }
             });
 

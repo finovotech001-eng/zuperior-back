@@ -1,9 +1,7 @@
 // server/src/controllers/admin.controller.js
 
-import { PrismaClient } from '@prisma/client';
 import { logActivity } from './activityLog.controller.js';
-
-const prisma = new PrismaClient();
+import dbService from '../services/db.service.js';
 
 // Get all users with pagination, search, and filters
 export const getAllUsers = async (req, res) => {
@@ -49,7 +47,7 @@ export const getAllUsers = async (req, res) => {
     }
 
     // Get users with relations
-    const users = await prisma.User.findMany({
+    const users = await dbService.prisma.user.findMany({
       where,
       include: {
         kyc: true,
@@ -94,7 +92,7 @@ export const getAllUsers = async (req, res) => {
     });
 
     // Get total count for pagination
-    const total = await prisma.User.count({ where });
+    const total = await dbService.prisma.user.count({ where });
 
     res.json({
       success: true,
@@ -122,7 +120,7 @@ export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await prisma.User.findUnique({
+    const user = await dbService.prisma.user.findUnique({
       where: { id },
       include: {
         kyc: true,
@@ -178,7 +176,7 @@ export const updateUser = async (req, res) => {
     const { id } = req.params;
     const { name, phone, country, status, role, emailVerified } = req.body;
 
-    const user = await prisma.User.findUnique({
+    const user = await dbService.prisma.user.findUnique({
       where: { id }
     });
 
@@ -199,7 +197,7 @@ export const updateUser = async (req, res) => {
     if (emailVerified !== undefined) updateData.emailVerified = emailVerified;
 
     // Update user
-    const updatedUser = await prisma.User.update({
+    const updatedUser = await dbService.prisma.user.update({
       where: { id },
       data: updateData,
       include: {
@@ -270,7 +268,7 @@ export const banUser = async (req, res) => {
       });
     }
 
-    const user = await prisma.User.findUnique({
+    const user = await dbService.prisma.user.findUnique({
       where: { id }
     });
 
@@ -284,7 +282,7 @@ export const banUser = async (req, res) => {
     const newStatus = action === 'ban' ? 'banned' : 'active';
 
     // Update user status
-    const updatedUser = await prisma.User.update({
+    const updatedUser = await dbService.prisma.user.update({
       where: { id },
       data: {
         status: newStatus
@@ -335,7 +333,7 @@ export const getUserStats = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await prisma.User.findUnique({
+    const user = await dbService.prisma.user.findUnique({
       where: { id },
       include: {
         manualDeposits: {
@@ -421,7 +419,7 @@ export const exportUsers = async (req, res) => {
     }
 
     // Get users for export
-    const users = await prisma.User.findMany({
+    const users = await dbService.prisma.user.findMany({
       where,
       include: {
         kyc: true,
@@ -508,7 +506,7 @@ export const getUserMt5Accounts = async (req, res) => {
     }
 
     // Verify user exists
-    const user = await prisma.User.findUnique({
+    const user = await dbService.prisma.user.findUnique({
       where: { id: userId }
     });
 
@@ -520,7 +518,7 @@ export const getUserMt5Accounts = async (req, res) => {
     }
 
     // Fetch MT5 accounts for the user
-    const accounts = await prisma.MT5Account.findMany({
+    const accounts = await dbService.prisma.mT5Account.findMany({
       where: { userId: userId },
       orderBy: { createdAt: 'desc' }
     });

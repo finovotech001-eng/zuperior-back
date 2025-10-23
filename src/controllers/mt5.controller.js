@@ -1,7 +1,7 @@
 // zuperior-dashboard/server/src/controllers/mt5.controller.js
 
 import * as mt5Service from '../services/mt5.service.js';
-import prisma from '../services/db.service.js';
+import dbService from '../services/db.service.js';
 
 // 4.1 GET /api/mt5/groups
 export const getGroups = async (req, res) => {
@@ -92,7 +92,7 @@ export const createAccount = async (req, res) => {
         console.log('📊 MT5 Login ID:', mt5Login);
         console.log('👤 User ID:', userId);
 
-        const newAccount = await prisma.MT5Account.create({
+        const newAccount = await dbService.prisma.MT5Account.create({
             data: {
                 accountId: mt5Login.toString(),
                 userId: userId
@@ -138,7 +138,7 @@ export const deposit = async (req, res) => {
         }
 
         // Verify the MT5 account belongs to the authenticated user
-        const account = await prisma.MT5Account.findFirst({
+        const account = await dbService.prisma.MT5Account.findFirst({
             where: {
                 accountId: login.toString(),
                 userId: userId
@@ -167,7 +167,7 @@ export const deposit = async (req, res) => {
         console.log('✅ Deposit successful for account:', login);
 
         // Create transaction record
-        await prisma.MT5Transaction.create({
+        await dbService.prisma.MT5Transaction.create({
             data: {
                 type: 'Deposit',
                 amount: parseFloat(balance),
@@ -202,7 +202,7 @@ export const getUserAccounts = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const accounts = await prisma.MT5Account.findMany({
+        const accounts = await dbService.prisma.mT5Account.findMany({
             where: { userId: userId },
             orderBy: { createdAt: 'desc' }
         });
@@ -257,7 +257,7 @@ export const withdraw = async (req, res) => {
         }
 
         // Verify the MT5 account belongs to the authenticated user and get current balance
-        const account = await prisma.MT5Account.findFirst({
+        const account = await dbService.prisma.mT5Account.findFirst({
             where: {
                 accountId: login.toString(),
                 userId: userId
@@ -286,7 +286,7 @@ export const withdraw = async (req, res) => {
         console.log('✅ Withdrawal successful for account:', login);
 
         // Create transaction record
-        await prisma.MT5Transaction.create({
+        await dbService.prisma.MT5Transaction.create({
             data: {
                 type: 'Withdrawal',
                 amount: parseFloat(balance),
@@ -333,7 +333,7 @@ export const getUserProfile = async (req, res) => {
         }
 
         // Verify the MT5 account belongs to the authenticated user
-        const account = await prisma.MT5Account.findFirst({
+        const account = await dbService.prisma.mT5Account.findFirst({
             where: {
                 accountId: login.toString(),
                 userId: userId
@@ -393,13 +393,13 @@ export const internalTransfer = async (req, res) => {
 
         // Verify both accounts belong to the authenticated user
         const [fromAcc, toAcc] = await Promise.all([
-            prisma.MT5Account.findFirst({
+            dbService.prisma.mT5Account.findFirst({
                 where: {
                     accountId: fromAccount.toString(),
                     userId: userId
                 }
             }),
-            prisma.MT5Account.findFirst({
+            dbService.prisma.mT5Account.findFirst({
                 where: {
                     accountId: toAccount.toString(),
                     userId: userId
@@ -446,7 +446,7 @@ export const internalTransfer = async (req, res) => {
 
         // Create transaction records for both accounts
         await Promise.all([
-            prisma.MT5Transaction.create({
+            dbService.prisma.MT5Transaction.create({
                 data: {
                     type: 'Withdrawal',
                     amount: parseFloat(amount),
@@ -456,7 +456,7 @@ export const internalTransfer = async (req, res) => {
                     transactionId: `INT_WDR_${Date.now()}_${fromAccount}`
                 }
             }),
-            prisma.MT5Transaction.create({
+            dbService.prisma.MT5Transaction.create({
                 data: {
                     type: 'Deposit',
                     amount: parseFloat(amount),
@@ -515,7 +515,7 @@ export const storeAccount = async (req, res) => {
         }
 
         // Find user by name and email
-        const user = await prisma.User.findFirst({
+        const user = await dbService.prisma.user.findFirst({
             where: {
                 name: userName,
                 email: userEmail
@@ -533,7 +533,7 @@ export const storeAccount = async (req, res) => {
         console.log('✅ Found user:', user.name, 'with ID:', user.id);
 
         // Check if account already exists
-        const existingAccount = await prisma.MT5Account.findFirst({
+        const existingAccount = await dbService.prisma.mT5Account.findFirst({
             where: {
                 accountId: accountId.toString(),
                 userId: user.id
@@ -553,7 +553,7 @@ export const storeAccount = async (req, res) => {
         }
 
         // Store account in database with only basic fields
-        const newAccount = await prisma.MT5Account.create({
+        const newAccount = await dbService.prisma.mT5Account.create({
             data: {
                 accountId: accountId.toString(),
                 userId: user.id

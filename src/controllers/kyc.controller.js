@@ -1,6 +1,6 @@
 // server/src/controllers/kyc.controller.js
 
-import prisma from '../services/db.service.js';
+import dbService from '../services/db.service.js';
 
 // 1. Create initial KYC record for user
 export const createKycRecord = async (req, res) => {
@@ -10,7 +10,7 @@ export const createKycRecord = async (req, res) => {
         console.log('📝 Creating KYC record for user:', userId);
 
         // Check if KYC record already exists
-        const existingKyc = await prisma.KYC.findUnique({
+        const existingKyc = await dbService.prisma.KYC.findUnique({
             where: { userId }
         });
 
@@ -24,7 +24,7 @@ export const createKycRecord = async (req, res) => {
         }
 
         // Create new KYC record
-        const kyc = await prisma.KYC.create({
+        const kyc = await dbService.prisma.KYC.create({
             data: {
                 userId,
                 verificationStatus: 'Pending'
@@ -61,12 +61,12 @@ export const updateDocumentStatus = async (req, res) => {
         }
 
         // Find or create KYC record
-        let kyc = await prisma.KYC.findUnique({
+        let kyc = await dbService.prisma.KYC.findUnique({
             where: { userId }
         });
 
         if (!kyc) {
-            kyc = await prisma.KYC.create({
+            kyc = await dbService.prisma.KYC.create({
                 data: {
                     userId,
                     documentReference,
@@ -87,7 +87,7 @@ export const updateDocumentStatus = async (req, res) => {
                 newStatus = 'Partially Verified';
             }
 
-            kyc = await prisma.KYC.update({
+            kyc = await dbService.prisma.KYC.update({
                 where: { userId },
                 data: {
                     documentReference,
@@ -134,12 +134,12 @@ export const updateAddressStatus = async (req, res) => {
         }
 
         // Find or create KYC record
-        let kyc = await prisma.KYC.findUnique({
+        let kyc = await dbService.prisma.KYC.findUnique({
             where: { userId }
         });
 
         if (!kyc) {
-            kyc = await prisma.KYC.create({
+            kyc = await dbService.prisma.KYC.create({
                 data: {
                     userId,
                     addressReference,
@@ -159,7 +159,7 @@ export const updateAddressStatus = async (req, res) => {
                 newStatus = 'Partially Verified';
             }
 
-            kyc = await prisma.KYC.update({
+            kyc = await dbService.prisma.KYC.update({
                 where: { userId },
                 data: {
                     addressReference,
@@ -196,7 +196,7 @@ export const getKycStatus = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const kyc = await prisma.KYC.findUnique({
+        const kyc = await dbService.prisma.KYC.findUnique({
             where: { userId }
         });
 
@@ -249,7 +249,7 @@ export const handleCallback = async (req, res) => {
         }
 
         // Find KYC record by reference (document, address, or AML)
-        const kyc = await prisma.KYC.findFirst({
+        const kyc = await dbService.prisma.KYC.findFirst({
             where: {
                 OR: [
                     { documentReference: reference },
@@ -351,7 +351,7 @@ export const handleCallback = async (req, res) => {
         }
 
         // Update KYC record
-        const updatedKyc = await prisma.KYC.update({
+        const updatedKyc = await dbService.prisma.KYC.update({
             where: { id: kyc.id },
             data: updateData
         });

@@ -1,4 +1,5 @@
-import prisma from '../services/db.service.js';
+import dbService from '../services/db.service.js';
+import { randomUUID } from 'crypto';
 
 // Create a new payment method for the user
 export const createPaymentMethod = async (req, res) => {
@@ -15,15 +16,56 @@ export const createPaymentMethod = async (req, res) => {
 
     // No validation on address format
 
-    const paymentMethod = await prisma.paymentMethod.create({
-      data: {
-        userId,
-        address,
-        currency: currency || 'USDT',
-        network: network || 'TRC20',
-        status: 'pending'
+    let paymentMethod;
+    try {
+      paymentMethod = await dbService.prisma.paymentMethod.create({
+        data: {
+          id: randomUUID(),
+          userId,
+          address,
+          currency: currency || 'USDT',
+          network: (network || 'TRC20').replace(/[-\s]/g, ''),
+          status: 'pending'
+        }
+      });
+    } catch (innerErr) {
+      const msg = String(innerErr?.message || innerErr);
+      // Handle table not existing: create it and retry once
+      if (msg.includes('does not exist') || msg.includes('relation') || msg.includes('P2021')) {
+        try {
+          await dbService.prisma.$executeRawUnsafe(`
+            CREATE TABLE IF NOT EXISTS "PaymentMethod" (
+              "id" TEXT PRIMARY KEY,
+              "userId" TEXT NOT NULL,
+              "address" TEXT NOT NULL,
+              "currency" TEXT NOT NULL DEFAULT 'USDT',
+              "network" TEXT NOT NULL DEFAULT 'TRC20',
+              "status" TEXT NOT NULL DEFAULT 'pending',
+              "approvedAt" TIMESTAMP(3),
+              "approvedBy" TEXT,
+              "rejectionReason" TEXT,
+              "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          paymentMethod = await dbService.prisma.paymentMethod.create({
+            data: {
+              id: randomUUID(),
+              userId,
+              address,
+              currency: currency || 'USDT',
+              network: (network || 'TRC20').replace(/[-\s]/g, ''),
+              status: 'pending'
+            }
+          });
+        } catch (retryErr) {
+          console.error('Retry create payment method failed:', retryErr);
+          throw retryErr;
+        }
+      } else {
+        throw innerErr;
       }
-    });
+    }
 
     return res.status(201).json({
       status: 'Success',
@@ -45,15 +87,24 @@ export const getUserPaymentMethods = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const paymentMethods = await prisma.paymentMethod.findMany({
+    const rows = await dbService.prisma.paymentMethod.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
     });
 
-    return res.status(200).json({
-      status: 'Success',
-      data: paymentMethods
-    });
+    // Shape response to match frontend expectations
+    const data = rows.map(r => ({
+      id: r.id,
+      address: r.address,
+      currency: r.currency,
+      network: r.network,
+      status: r.status,
+      submittedAt: r.createdAt,
+      approvedAt: r.approvedAt ?? undefined,
+      rejectionReason: r.rejectionReason ?? undefined,
+    }));
+
+    return res.status(200).json({ status: 'Success', data });
   } catch (error) {
     console.error('Error fetching payment methods:', error);
     return res.status(500).json({
@@ -71,7 +122,7 @@ export const getAllPaymentMethods = async (req, res) => {
 
     const where = status ? { status } : {};
 
-    const paymentMethods = await prisma.paymentMethod.findMany({
+    const paymentMethods = await dbService.prisma.paymentMethod.findMany({
       where,
       include: {
         user: {
@@ -105,7 +156,7 @@ export const approvePaymentMethod = async (req, res) => {
     const { id } = req.params;
     const adminId = req.user.id;
 
-    const paymentMethod = await prisma.paymentMethod.update({
+    const paymentMethod = await dbService.prisma.paymentMethod.update({
       where: { id },
       data: {
         status: 'approved',
@@ -136,7 +187,7 @@ export const rejectPaymentMethod = async (req, res) => {
     const { reason } = req.body;
     const adminId = req.user.id;
 
-    const paymentMethod = await prisma.paymentMethod.update({
+    const paymentMethod = await dbService.prisma.paymentMethod.update({
       where: { id },
       data: {
         status: 'rejected',
