@@ -7,12 +7,15 @@ export const createKycRecord = async (req, res) => {
     try {
         const userId = req.user.id;
 
+        console.log('📝 Creating KYC record for user:', userId);
+
         // Check if KYC record already exists
         const existingKyc = await prisma.KYC.findUnique({
             where: { userId }
         });
 
         if (existingKyc) {
+            console.log('✅ KYC record already exists:', existingKyc.id);
             return res.json({
                 success: true,
                 message: 'KYC record already exists',
@@ -28,13 +31,15 @@ export const createKycRecord = async (req, res) => {
             }
         });
 
+        console.log('✅ KYC record created successfully:', kyc.id);
+
         res.json({
             success: true,
             message: 'KYC record created successfully',
             data: kyc
         });
     } catch (error) {
-        console.error('Error creating KYC record:', error);
+        console.error('❌ Error creating KYC record:', error);
         res.status(500).json({
             success: false,
             message: error.message || 'Internal server error'
