@@ -9,6 +9,7 @@ const router = express.Router();
 router.post('/get-user', getUser);
 router.post('/transactions/get', getTransactions);
 router.get('/transactions/database', protect, getDatabaseTransactions);
+router.post('/transactions/database', protect, getDatabaseTransactions);
 
 router.get('/profile', protect, getProfile);
 
